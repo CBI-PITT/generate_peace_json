@@ -29,7 +29,9 @@ def operation_form(operation):
         # Gather data into a JSON file
         data = {field.name: field.data for field in form if field.name not in ["submit", "csrf_token"]}
         # Save the JSON data to a file
-        with open('/h20/CBI/Iana/json/operation_data.json', 'w') as f:
+        from datetime import datetime
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        with open(f'/h20/CBI/Iana/json/SLURM_settings_{timestamp}.json', 'w') as f:
             import json
             json.dump(data, f)
 

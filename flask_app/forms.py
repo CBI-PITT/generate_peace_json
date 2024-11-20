@@ -10,13 +10,13 @@ class BaseForm(FlaskForm):
 
 
 class DeepBlinkForm(BaseForm):
-    operation = StringField('Operation', validators=[DataRequired()], default='deepblink')
+    operation = StringField('Operation', validators=[DataRequired()], default='deepblink', render_kw={"disabled": True})
     signal_channel = StringField('Signal channel (number, starting with 0)', default='0')
     resolution_level = StringField('Resolution level (number, starting with 0)', default='0')
 
 
 class BrainRegForm(BaseForm):
-    operation = StringField('Operation', validators=[DataRequired()], default='brainreg')
+    operation = StringField('Operation', validators=[DataRequired()], default='brainreg', render_kw={"disabled": True})
     background_channel = StringField('Background channel (number, starting with 0)', default='0')
     atlas = StringField('Atlas (atlas name from Brainglobe Atlas API)', default='allen_mouse_25um')
     orientation = StringField('Orientation (three-letter string)', default='sal')
