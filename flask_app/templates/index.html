@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Image Operations</title>
+</head>
+<body>
+    <h1>Select an Operation</h1>
+    <ul>
+        {% for operation in operations %}
+            <li><a href="{{ url_for('operation_form', operation=operation) }}">{{ operation }}</a></li>
+        {% endfor %}
+    </ul>
+</body>
+</html>
