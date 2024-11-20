@@ -1,18 +1,25 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <title>{{ operation }} Settings</title>
-</head>
-<body>
-    <h1>{{ operation.capitalize() }} Settings</h1>
-    <form method="post">
-        {{ form.hidden_tag() }}
-        {% for field in form %}
-            <div>
-                {{ field.label }} {{ field }}
-            </div>
-        {% endfor %}
-        <button type="submit">Submit</button>
-    </form>
-</body>
-</html>
+{% extends "base.html" %}
+
+{% block title %}{{ operation.capitalize() }} Form{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">{{ operation.capitalize() }} Settings</h2>
+    </div>
+    <div class="card-body">
+        <form method="post" class="needs-validation" novalidate>
+            {{ form.hidden_tag() }}
+            {% for field in form %}
+                {% if field.widget.input_type != 'hidden' %}
+                    <div class="mb-3">
+                        {{ field.label(class="form-label") }}
+                        {{ field(class="form-control") }}
+                    </div>
+                {% endif %}
+            {% endfor %}
+            <button type="submit" class="btn btn-success">Submit</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

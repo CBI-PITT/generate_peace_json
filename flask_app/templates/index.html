@@ -1,14 +1,18 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <title>Image Operations</title>
-</head>
-<body>
-    <h1>Select an Operation</h1>
-    <ul>
+{% extends "base.html" %}
+
+{% block title %}Home{% endblock %}
+
+{% block content %}
+<div class="text-center">
+    <h1 class="my-4">Select an Operation</h1>
+    <ul class="list-group">
         {% for operation in operations %}
-            <li><a href="{{ url_for('operation_form', operation=operation) }}">{{ operation }}</a></li>
+            <li class="list-group-item">
+                <a href="{{ url_for('operation_form', operation=operation) }}" class="btn btn-primary btn-block">
+                    {{ operation }}
+                </a>
+            </li>
         {% endfor %}
     </ul>
-</body>
-</html>
+</div>
+{% endblock %}
