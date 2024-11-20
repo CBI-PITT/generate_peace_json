@@ -1,5 +1,6 @@
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, redirect, url_for
 from forms import BaseForm, DeepBlinkForm, BrainRegForm
+from flask import flash
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your_secret_key'
@@ -31,7 +32,12 @@ def operation_form(operation):
         with open('/h20/CBI/Iana/json/operation_data.json', 'w') as f:
             import json
             json.dump(data, f)
-        return jsonify(data)
+
+        # Flash a success message
+        flash(f"{operation.capitalize()} task created successfully", "success")
+
+        # Redirect to the home page
+        return redirect(url_for('index'))
 
     return render_template('form.html', form=form, operation=operation)
 
