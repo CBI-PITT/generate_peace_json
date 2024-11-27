@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify, redirect, url_for
-from forms import BaseForm, DeepBlinkForm, BrainRegForm
+from forms import BaseForm, DeepBlinkForm, BrainRegForm, CellFinderForm
 from flask import flash
 
 app = Flask(__name__)
@@ -8,7 +8,8 @@ app.config['SECRET_KEY'] = 'your_secret_key'
 # Operation forms dictionary
 OPERATION_FORMS = {
     "deepblink": DeepBlinkForm,
-    "brainreg": BrainRegForm
+    "brainreg": BrainRegForm,
+    "cellfinder": CellFinderForm
 }
 
 
@@ -27,13 +28,20 @@ def operation_form(operation):
 
     if form.validate_on_submit():
         # Gather data into a JSON file
-        data = {field.name: field.data for field in form if field.name not in ["submit", "csrf_token"]}
+        json_data = {
+            "input": form.input.data,
+            "output": form.output.data,
+            "operation": operation,
+            "extras": {}
+        }
+        data = {field.name: field.data for field in form if field.name not in ["submit", "csrf_token", "input", "output", "operation"]}
+        json_data["extras"] = data
         # Save the JSON data to a file
         from datetime import datetime
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         with open(f'/h20/CBI/Iana/json/SLURM_settings_{timestamp}.json', 'w') as f:
             import json
-            json.dump(data, f)
+            json.dump(json_data, f)
 
         # Flash a success message
         flash(f"{operation.capitalize()} task created successfully", "success")

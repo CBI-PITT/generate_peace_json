@@ -21,3 +21,9 @@ class BrainRegForm(BaseForm):
     atlas = StringField('Atlas (atlas name from Brainglobe Atlas API)', default='allen_mouse_25um')
     orientation = StringField('Orientation (three-letter string)', default='sal')
     brain_geometry = StringField('Brain Geometry (full / hemisphere_l / hemisphere_r)', default='full')
+
+
+class CellFinderForm(BaseForm):
+    operation = StringField('Operation', validators=[DataRequired()], default='cellfinder', render_kw={"disabled": True})
+    signal_channel = StringField('Signal channel (number, starting with 0)', default='0')
+    resolution_level = StringField('Resolution level (number, starting with 0)', default='0')
