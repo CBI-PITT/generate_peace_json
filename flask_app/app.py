@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify, redirect, url_for
-from forms import BaseForm, DeepBlinkForm, BrainRegForm, CellFinderForm
+from forms import BaseForm, DeepBlinkForm, BrainRegForm, CellFinderForm, AntsForm
 from flask import flash
 
 app = Flask(__name__)
@@ -9,7 +9,8 @@ app.config['SECRET_KEY'] = 'your_secret_key'
 OPERATION_FORMS = {
     "deepblink": DeepBlinkForm,
     "brainreg": BrainRegForm,
-    "cellfinder": CellFinderForm
+    "cellfinder": CellFinderForm,
+    "ants": AntsForm
 }
 
 
