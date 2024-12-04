@@ -34,3 +34,9 @@ class AntsForm(BaseForm):
     background_channel = StringField('Background channel (number, starting with 0)', default='0')
     atlas = StringField('Atlas (atlas name from Brainglobe Atlas API)', default='allen_mouse_25um')
     orientation = StringField('Orientation (three-letter string)', default='sal')
+
+
+class ContrastStretchForm(BaseForm):
+    operation = StringField('Operation', validators=[DataRequired()], default='stretch_contrast', render_kw={"disabled": True})
+    channel = StringField('Channel (number, starting with 0)', default='0')
+    resolution_level = StringField('Resolution level (number, starting with 0)', default='0')

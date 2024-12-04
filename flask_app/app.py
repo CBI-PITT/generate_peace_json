@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, jsonify, redirect, url_for
-from forms import BaseForm, DeepBlinkForm, BrainRegForm, CellFinderForm, AntsForm
+from forms import BaseForm, DeepBlinkForm, BrainRegForm, CellFinderForm, AntsForm, ContrastStretchForm
 from flask import flash
 
 app = Flask(__name__)
@@ -10,7 +10,8 @@ OPERATION_FORMS = {
     "deepblink": DeepBlinkForm,
     "brainreg": BrainRegForm,
     "cellfinder": CellFinderForm,
-    "ants": AntsForm
+    "ants": AntsForm,
+    "stretch_contrast": ContrastStretchForm
 }
 
 
