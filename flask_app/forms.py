@@ -40,3 +40,10 @@ class ContrastStretchForm(BaseForm):
     operation = StringField('Operation', validators=[DataRequired()], default='stretch_contrast', render_kw={"disabled": True})
     channel = StringField('Channel (number, starting with 0)', default='0')
     resolution_level = StringField('Resolution level (number, starting with 0)', default='0')
+
+
+class IlastikForm(BaseForm):
+    operation = StringField('Operation', validators=[DataRequired()], default='ilastik', render_kw={"disabled": True})
+    channel = StringField('Channel (number, starting with 0)', default='0')
+    resolution_level = StringField('Resolution level (number, starting with 0)', default='0')
+    model_path = StringField('Model path', validators=[DataRequired()])
