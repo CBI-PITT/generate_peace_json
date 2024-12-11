@@ -33,12 +33,26 @@ print("OPERATIONS:", OPERATIONS)
 PLUGINS = load_plugins('plugins')
 print("PLUGINS:", PLUGINS)
 
+READER_PLUGINS = load_plugins('reader_plugins')
+print("READER PLUGINS:", READER_PLUGINS)
+
 
 @app.route('/')
 def index():
+    return render_template('index.html', operations=[])
+
+
+@app.route('/analyze')
+def analyze():
     operations = list(OPERATIONS.keys())
     operations.extend(PLUGINS.keys())
-    return render_template('index.html', operations=operations)
+    return render_template('operations.html', operations=operations)
+
+
+@app.route('/read')
+def read():
+    operations = list(READER_PLUGINS.keys())
+    return render_template('operations.html', operations=operations)
 
 
 @app.route('/operation/<operation>', methods=['GET', 'POST'])
@@ -49,6 +63,9 @@ def operation_form(operation):
     elif operation in PLUGINS:
         # load plugins
         plugin = PLUGINS.get(operation)
+    elif operation in READER_PLUGINS:
+        # load reader plugins
+        plugin = READER_PLUGINS.get(operation)
     else:
         return f"Operation '{operation}' not supported", 404
     form_class = plugin.get_form()
