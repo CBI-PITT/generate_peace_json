@@ -4,17 +4,17 @@ from operations import BaseOperation
 from forms import BaseForm
 
 
-class RembgForm(BaseForm):
-    operation = StringField('Operation', validators=[DataRequired()], default='rembg', render_kw={"disabled": True})
-    # channel = StringField('Channel (number, starting with 0)', default='0')
-    # resolution_level = StringField('Resolution level (number, starting with 0)', default='0')
+class OMEhansReaderForm(BaseForm):
+    operation = StringField('Operation', validators=[DataRequired()], default='omehans_reader', render_kw={"disabled": True})
+    channel = StringField('Channel (number, starting with 0)', default='0')
+    resolution_level = StringField('Resolution level (number, starting with 0)', default='0')
 
 
-class RembgPlugin(BaseOperation):
-    name = "rembg"
+class ImarisReaderPlugin(BaseOperation):
+    name = "omehans_reader"
 
     def get_form(self):
-        return RembgForm
+        return OMEhansReaderForm
 
     def process_data(self, form):
         # Example processing logic for filter operation
@@ -29,7 +29,6 @@ class RembgPlugin(BaseOperation):
         # Save the JSON data to a file
         from datetime import datetime
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        with open(f'/h20/CBI/Iana/json/SLURM_settings_{timestamp}.json', 'w') as f:
+        with open(f'/h20/CBI/Iana/json/SLURM_reader_{timestamp}.json', 'w') as f:
             import json
             json.dump(json_data, f)
-
