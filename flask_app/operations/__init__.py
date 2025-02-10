@@ -1,1 +1,1 @@
-from .base import BaseOperation
+from .base import BaseOperation, BaseReader

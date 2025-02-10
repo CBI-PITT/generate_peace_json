@@ -4,12 +4,18 @@ import os
 from flask import Flask, render_template, request, jsonify, redirect, url_for
 from flask import flash
 
-from operations import BaseOperation
+from operations import BaseOperation, BaseReader
+
+# from flask_file_browser import extended_app
+# from flask_file_browser import routes
 
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your_secret_key'
 
+# Register the browser app blueprint
+# app.register_blueprint(extended_app, url_prefix='/browser')
+# app = routes.init_blueprint(app, prefix="/browser")
 
 # Discover and load plugins
 def load_plugins(folder):
@@ -27,13 +33,28 @@ def load_plugins(folder):
     return plugins
 
 
+def load_reader_plugins(folder):
+    plugins = {}
+    full_path = os.path.join(os.path.dirname(__file__), folder)
+    for filename in os.listdir(full_path):
+        if os.path.isfile(os.path.join(full_path, filename)) and filename not in ["base.py", '__init__.py']:
+            module_name = f"{folder}.{filename[:-3]}"
+            module = importlib.import_module(module_name)
+            for attr_name in dir(module):
+                cls = getattr(module, attr_name)
+                if isinstance(cls, type) and issubclass(cls, BaseReader) and cls is not BaseReader:
+                    plugin_instance = cls()
+                    plugins[plugin_instance.name] = plugin_instance
+    return plugins
+
+
 OPERATIONS = load_plugins('operations')
 print("OPERATIONS:", OPERATIONS)
 
 PLUGINS = load_plugins('plugins')
 print("PLUGINS:", PLUGINS)
 
-READER_PLUGINS = load_plugins('reader_plugins')
+READER_PLUGINS = load_reader_plugins('reader_plugins')
 print("READER PLUGINS:", READER_PLUGINS)
 
 
@@ -82,4 +103,4 @@ def operation_form(operation):
 
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=1313, debug=True)
