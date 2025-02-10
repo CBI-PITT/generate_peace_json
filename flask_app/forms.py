@@ -46,3 +46,9 @@ class IlastikForm(BaseForm):
     # channel = StringField('Channel (number, starting with 0)', default='0')
     # resolution_level = StringField('Resolution level (number, starting with 0)', default='0')
     model_path = StringField('Model path', validators=[DataRequired()])
+
+class DBSCANForm(BaseForm):
+    operation = StringField('Operation', validators=[DataRequired()], default='dbscan', render_kw={"disabled": True})
+    cell_candidates_path = StringField('Detected cells path', validators=[DataRequired()])
+    epsilon = StringField('Maximum Distance in Cluster', validators=[DataRequired()], default=3)
+    min_samples = StringField('Minimum Number of Samples in Cluster', validators=[DataRequired()], default=2)
