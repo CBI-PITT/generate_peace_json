@@ -7,7 +7,7 @@ from flask import flash
 from operations import BaseOperation, BaseReader
 
 # from flask_file_browser import extended_app
-# from flask_file_browser import routes
+from flask_file_browser import routes
 
 
 app = Flask(__name__)
@@ -15,7 +15,7 @@ app.config['SECRET_KEY'] = 'your_secret_key'
 
 # Register the browser app blueprint
 # app.register_blueprint(extended_app, url_prefix='/browser')
-# app = routes.init_blueprint(app, prefix="/browser")
+app = routes.init_blueprint(app, prefix="/browser")
 
 # Discover and load plugins
 def load_plugins(folder):
