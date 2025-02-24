@@ -13,6 +13,8 @@ from flask_file_browser import routes
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your_secret_key'
 
+app.template_folder = 'templates'
+
 # Register the browser app blueprint
 # app.register_blueprint(extended_app, url_prefix='/browser')
 app = routes.init_blueprint(app, prefix="/browser")
