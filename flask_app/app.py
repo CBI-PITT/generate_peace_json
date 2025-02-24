@@ -12,12 +12,14 @@ from flask_file_browser import routes
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your_secret_key'
+app.config['WTF_CSRF_ENABLED'] = False
 
 app.template_folder = 'templates'
 
 # Register the browser app blueprint
 # app.register_blueprint(extended_app, url_prefix='/browser')
 app = routes.init_blueprint(app, prefix="/browser")
+
 
 # Discover and load plugins
 def load_plugins(folder):
@@ -93,13 +95,15 @@ def operation_form(operation):
         return f"Operation '{operation}' not supported", 404
     form_class = plugin.get_form()
     form = form_class()
-    if request.method == 'POST' and form.validate():
-        # Process the form data
-        plugin.process_data(form)
-        # Flash a success message
-        flash(f"{operation.capitalize()} task created successfully", "success")
-        # Redirect to the home page
-        return redirect(url_for('index'))
+    if request.method == 'POST':
+        form = form_class(request.form)
+        if form.validate():
+            # Process the form data
+            plugin.process_data(form)
+            # Flash a success message
+            flash(f"{operation.capitalize()} task created successfully", "success")
+            # Redirect to the home page
+            return redirect(url_for('index'))
 
     return render_template('form.html', form=form, operation=operation)
 
