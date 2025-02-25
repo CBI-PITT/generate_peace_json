@@ -47,8 +47,20 @@ class IlastikForm(BaseForm):
     # resolution_level = StringField('Resolution level (number, starting with 0)', default='0')
     model_path = StringField('Model path', validators=[DataRequired()])
 
+
 class DBSCANForm(BaseForm):
     operation = StringField('Operation', validators=[DataRequired()], default='dbscan', render_kw={"disabled": True})
     cell_candidates_path = StringField('Detected cells path', validators=[DataRequired()])
     epsilon = StringField('Maximum Distance in Cluster', validators=[DataRequired()], default=3)
     min_samples = StringField('Minimum Number of Samples in Cluster', validators=[DataRequired()], default=2)
+
+
+class CellposeForm(BaseForm):
+    operation = StringField('Operation', validators=[DataRequired()], default='cellpose', render_kw={"disabled": True})
+    model = StringField('Model name (general, nuclei, cyto, cyto2 etc)', validators=[DataRequired()], default='general')
+
+
+# class ResNetClassificationForm(BaseForm):
+#     operation = StringField('Operation', validators=[DataRequired()], default='resnet_classification', render_kw={"disabled": True})
+#     cell_candidates_path = StringField('Detected cells path', validators=[DataRequired()])
+#     model_path = StringField('Model path', validators=[DataRequired()])
