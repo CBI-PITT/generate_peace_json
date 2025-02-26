@@ -1,0 +1,51 @@
+.list-group-item-action {
+    cursor: pointer; /* Shows a pointer when hovering over list items */
+}
+
+.list-group-item {
+    transition: background-color 0.2s ease; /* Smooth transition effect for background */
+}
+
+.list-group-item:hover {
+    background-color: #f8f9fa; /* Light hover effect to indicate interactiveness */
+}
+
+.list-group-item .fa-chevron-down {
+    transition: transform 0.2s ease; /* Smooth rotation for chevron icon */
+}
+
+.collapse.show + .list-group-item .fa-chevron-down {
+    transform: rotate(180deg); /* Rotate icon when expanded */
+}
+
+/* Flexbox layout for each list item */
+.list-group-item .d-flex {
+    display: flex; /* Make the container a flex container */
+    align-items: center; /* Vertically center the items */
+    justify-content: center; /* Horizontally center the content inside */
+}
+
+/* Align the chevron icon on the left */
+.list-group-item .fa-chevron-down {
+    margin-right: 10px; /* Add space between icon and button */
+}
+
+/* Button styling */
+.btn-centered {
+    width: auto; /* Button width adapts to its content */
+    display: inline-block; /* Keeps button's width as needed */
+}
+
+/* Spacer to push button to the center */
+.flex-grow-1 {
+    flex-grow: 1; /* Makes the div take available space and pushes button to the center */
+}
+
+.chevron-icon {
+    transition: transform 0.3s ease; /* Smooth transition */
+}
+
+/* When the collapsible section is expanded, rotate the chevron */
+.collapse.show + .list-group-item .chevron-icon {
+    transform: rotate(180deg); /* Rotate 180 degrees */
+}

@@ -1,18 +1,32 @@
 {% extends "base.html" %}
 
 {% block title %}Home{% endblock %}
+{% block styles %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+<!--<link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">-->
+{% endblock %}
 
 {% block content %}
 <div class="text-center">
     <h1 class="my-4">Select an Operation</h1>
+    <div class="container d-flex justify-content-center" style="min-height: 100vh;">
     <ul class="list-group">
         {% for operation in operations %}
-            <li class="list-group-item">
-                <a href="{{ url_for('operation_form', operation=operation) }}" class="btn btn-primary btn-block">
+        <li class="list-group-item list-group-item-action" data-toggle="collapse" data-target="#collapseDescription{{ loop.index }}" aria-expanded="false" aria-controls="collapseDescription">
+            <div class="d-flex align-items-center">
+                <i class="fas fa-chevron-down mr-2 chevron-icon"></i>
+<!--                <div class="flex-grow-1"></div>-->
+                <a href="{{ url_for('operation_form', operation=operation) }}" class="btn btn-primary btn-centered">
                     {{ operation }}
                 </a>
-            </li>
+            </div>
+            <div id="collapseDescription{{ loop.index }}" class="collapse mt-2">
+                <p>{{ descriptions[loop.index-1] }}</p>
+            </div>
+        </li>
         {% endfor %}
     </ul>
+    </div>
 </div>
 {% endblock %}
+
