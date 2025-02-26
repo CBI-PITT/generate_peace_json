@@ -12,6 +12,7 @@ class OMEhansReaderForm(BaseForm):
 
 class ImarisReaderPlugin(BaseReader):
     name = "omehans_reader"
+    description = "Read multiscale .omehans file format (OME Zarr variation) into a tiff series"
 
     def get_form(self):
         return OMEhansReaderForm

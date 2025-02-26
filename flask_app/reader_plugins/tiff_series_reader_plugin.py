@@ -17,6 +17,7 @@ class TiffSeriesReaderForm(BaseForm):
 
 class TiffSeriesReaderPlugin(BaseReader):
     name = "tiff_series_reader"
+    description = "Make existing tiff series compatible with the analysis tools"
 
     def get_form(self):
         return TiffSeriesReaderForm

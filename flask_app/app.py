@@ -62,6 +62,19 @@ READER_PLUGINS = load_reader_plugins('reader_plugins')
 print("READER PLUGINS:", READER_PLUGINS)
 
 
+def get_op_descriptions(ops):
+    descriptions = []
+    for operation in ops:
+        if operation in OPERATIONS:
+            plugin = OPERATIONS.get(operation)
+        elif operation in PLUGINS:
+            plugin = PLUGINS.get(operation)
+        elif operation in READER_PLUGINS:
+            plugin = READER_PLUGINS.get(operation)
+        descriptions.append(plugin.description)
+    return descriptions
+
+
 @app.route('/')
 def index():
     return render_template('index.html', operations=[])
@@ -71,13 +84,15 @@ def index():
 def analyze():
     operations = list(OPERATIONS.keys())
     operations.extend(PLUGINS.keys())
-    return render_template('operations.html', operations=operations)
+    descriptions = get_op_descriptions(operations)
+    return render_template('operations.html', operations=operations, descriptions=descriptions)
 
 
 @app.route('/read')
 def read():
     operations = list(READER_PLUGINS.keys())
-    return render_template('operations.html', operations=operations)
+    descriptions = get_op_descriptions(operations)
+    return render_template('operations.html', operations=operations, descriptions=descriptions)
 
 
 @app.route('/operation/<operation>', methods=['GET', 'POST'])

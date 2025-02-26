@@ -12,6 +12,7 @@ class ImarisReaderForm(BaseForm):
 
 class ImarisReaderPlugin(BaseReader):
     name = "imaris_reader"
+    description = "Read multiscale .ims Imaris file format into a tiff series."
 
     def get_form(self):
         return ImarisReaderForm

@@ -5,6 +5,7 @@ from datetime import datetime
 
 class BaseOperation:
     name = "Base"
+    description = "Description will be added"
 
     def get_form(self):
         """
@@ -34,6 +35,7 @@ class BaseOperation:
 
 class BaseReader:
     name = "Base"
+    description = "Description will be added"
 
     def get_form(self):
         """
