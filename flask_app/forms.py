@@ -60,7 +60,7 @@ class CellposeForm(BaseForm):
     model = StringField('Model name (general, nuclei, cyto, cyto2 etc)', validators=[DataRequired()], default='general')
 
 
-# class ResNetClassificationForm(BaseForm):
-#     operation = StringField('Operation', validators=[DataRequired()], default='resnet_classification', render_kw={"disabled": True})
-#     cell_candidates_path = StringField('Detected cells path', validators=[DataRequired()])
-#     model_path = StringField('Model path', validators=[DataRequired()])
+class ResNetClassificationForm(BaseForm):
+    operation = StringField('Operation', validators=[DataRequired()], default='resnet_classification', render_kw={"disabled": True})
+    cell_candidates_path = StringField('Detected cells path', validators=[DataRequired()])
+    model_path = StringField('Model path', validators=[DataRequired()])
