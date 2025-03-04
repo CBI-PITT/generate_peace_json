@@ -64,3 +64,8 @@ class ResNetClassificationForm(BaseForm):
     operation = StringField('Operation', validators=[DataRequired()], default='resnet_classification', render_kw={"disabled": True})
     cell_candidates_path = StringField('Detected cells path', validators=[DataRequired()])
     model_path = StringField('Model path', validators=[DataRequired()])
+
+
+class Unet3DForm(BaseForm):
+    operation = StringField('Operation', validators=[DataRequired()], default='unet_3d', render_kw={"disabled": True})
+    model = StringField('Model path', validators=[DataRequired()])

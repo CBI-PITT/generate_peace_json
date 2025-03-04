@@ -1,0 +1,10 @@
+from .base import BaseOperation
+from forms import Unet3DForm
+
+
+class Unet3D(BaseOperation):
+    name = "unet_3d"
+    description = "Semantic segmentation of a 3D image stack using a provided model"
+
+    def get_form(self):
+        return Unet3DForm
