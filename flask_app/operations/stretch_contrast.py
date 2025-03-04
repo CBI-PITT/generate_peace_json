@@ -4,6 +4,7 @@ from forms import ContrastStretchForm
 
 class StretchContrast(BaseOperation):
     name = "stretch_contrast"
+    description = "Rescale image intensities between 2 and 98%"
 
     def get_form(self):
         return ContrastStretchForm

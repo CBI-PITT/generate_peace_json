@@ -12,6 +12,7 @@ class RembgForm(BaseForm):
 
 class RembgPlugin(BaseOperation):
     name = "rembg"
+    description = "Remove image background using a neural net"
 
     def get_form(self):
         return RembgForm

@@ -4,6 +4,7 @@ from forms import CellFinderForm
 
 class CellFinder(BaseOperation):
     name = "cellfinder"
+    description = "Detect cells (puncta) in a 3D image stack using threshold-based method"
 
     def get_form(self):
         return CellFinderForm

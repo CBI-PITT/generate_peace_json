@@ -4,6 +4,7 @@ from forms import ResNetClassificationForm
 
 class ResNetClassification(BaseOperation):
     name = "resnet_classification"
+    description = "Classify puncta to true cells or artifacts using a binary ResNet-50 deep learning classifier"
 
     def get_form(self):
         return ResNetClassificationForm

@@ -4,6 +4,7 @@ from forms import CellposeForm
 
 class Cellpose(BaseOperation):
     name = "cellpose"
+    description = "Detect cells in an arbitrary 3D image volume"
 
     def get_form(self):
         return CellposeForm

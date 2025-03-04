@@ -4,6 +4,7 @@ from forms import IlastikForm
 
 class Ilastik(BaseOperation):
     name = "ilastik"
+    description = "Semantic segmentation / pixel classification of an arbitrary 3D image stack based on a random forest classifier model"
 
     def get_form(self):
         return IlastikForm

@@ -4,6 +4,7 @@ from forms import BrainRegForm
 
 class BrainReg(BaseOperation):
     name = "brainreg"
+    description = "Register stack representing a 3D brain volume to an atlas from brainglobe atlas API"
 
     def get_form(self):
         return BrainRegForm
