@@ -123,5 +123,28 @@ def operation_form(operation):
     return render_template('form.html', form=form, operation=operation)
 
 
+@app.route('/queue')
+def slurm_queue():
+    jobs = []
+
+    import subprocess
+    try:
+        result = subprocess.run(["squeue", "--format=%i %u %t %M %D"], capture_output=True, text=True)
+        lines = result.stdout.strip().split("\n")
+
+        for line in lines[1:]:  # Skip the first line (header)
+            job_id, user, state, time, nodes = line.split(maxsplit=4)
+            jobs.append({
+                "Job ID": job_id,
+                "User": user,
+                "State": state,
+                "Time": time,
+                "Nodes": nodes
+            })
+    except:
+        print("ERROR: Couldn't get job list")
+    return render_template('queue.html', queue=jobs)
+
+
 if __name__ == '__main__':
     app.run(host="0.0.0.0", port=1313, debug=True)
