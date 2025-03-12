@@ -129,14 +129,16 @@ def slurm_queue():
 
     import subprocess
     try:
-        result = subprocess.run(["squeue", "--format=%i %u %t %M %D"], capture_output=True, text=True)
+        result = subprocess.run(["squeue", "--format=%i %u %j %P %t %M %D"], capture_output=True, text=True)
         lines = result.stdout.strip().split("\n")
 
         for line in lines[1:]:  # Skip the first line (header)
-            job_id, user, state, time, nodes = line.split(maxsplit=4)
+            job_id, user, job_name, partition, state, time, nodes = line.split(maxsplit=6)
             jobs.append({
                 "Job ID": job_id,
                 "User": user,
+                "Job Name": job_name,
+                "Partition": partition,
                 "State": state,
                 "Time": time,
                 "Nodes": nodes
