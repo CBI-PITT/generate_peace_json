@@ -15,7 +15,6 @@ class BaseOperation:
         raise NotImplementedError("Plugins must implement the 'get_form' method.")
 
     def process_data(self, form):
-        # Example processing logic for filter operation
         json_data = {
             "input": form.input.data,
             "output": form.output.data,
@@ -23,6 +22,9 @@ class BaseOperation:
             "extras": {}
         }
         data = {field.name: field.data for field in form if field.name not in ["submit", "csrf_token", "input", "output", "operation"]}
+        if form.input.data.startswith("/h20/Public/"):
+            user = form.input.data.replace('/h20/Public/', '').split('/')[0]
+            data['user'] = user
         json_data["extras"] = data
         # Save the JSON data to a file
         from datetime import datetime
@@ -53,6 +55,9 @@ class BaseReader:
             "extras": {}
         }
         data = {field.name: field.data for field in form if field.name not in ["submit", "csrf_token", "input", "output", "operation"]}
+        if form.input.data.startswith("/h20/Public/"):
+            user = form.input.data.replace('/h20/Public/', '').split('/')[0]
+            data['user'] = user
         json_data["extras"] = data
         # Save the JSON data to a file
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
