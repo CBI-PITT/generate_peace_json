@@ -13,8 +13,15 @@
             {% for field in form %}
                 {% if field.widget.input_type != 'hidden' %}
                     <div class="mb-3">
+                    {% if field.type == 'BooleanField' %}
+                        <div class="form-check">
+                            {{ field(class="form-check-input") }}
+                            {{ field.label(class="form-check-label") }}
+                        </div>
+                    {% else %}
                         {{ field.label(class="form-label") }}
                         {{ field(class="form-control") }}
+                    {% endif %}
                     </div>
                 {% endif %}
             {% endfor %}

@@ -1,5 +1,5 @@
 from flask_wtf import FlaskForm
-from wtforms import StringField, SubmitField, FieldList, FormField
+from wtforms import StringField, SubmitField, FieldList, FormField, BooleanField
 from wtforms.validators import DataRequired
 
 
@@ -10,6 +10,7 @@ class BaseForm(FlaskForm):
 
 class DeepBlinkForm(BaseForm):
     operation = StringField('Operation', validators=[DataRequired()], default='deepblink', render_kw={"disabled": True})
+    with_dbscan = BooleanField('With DBSCAN?')
     # signal_channel = StringField('Signal channel (number, starting with 0)', default='0')
     # resolution_level = StringField('Resolution level (number, starting with 0)', default='0')
 
