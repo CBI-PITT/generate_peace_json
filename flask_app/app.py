@@ -129,7 +129,7 @@ def slurm_queue():
 
     import subprocess
     try:
-        result = subprocess.run(["squeue", "--format=%i %u %j %P %t %M %D"], capture_output=True, text=True)
+        result = subprocess.run(["squeue", "--format=%i %u %j %P %t %M %Q"], capture_output=True, text=True)
         lines = result.stdout.strip().split("\n")
 
         for line in lines[1:]:  # Skip the first line (header)
