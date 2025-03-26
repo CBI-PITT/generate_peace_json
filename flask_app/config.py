@@ -1,1 +1,1 @@
-JSON_FOLDER = "/h20/CBI/Iana/json/test"
+JSON_FOLDER = "/h20/CBI/Iana/json"
