@@ -1,4 +1,4 @@
-from wtforms import StringField, SubmitField, Form
+from wtforms import StringField, SubmitField, Form, BooleanField
 from wtforms.validators import DataRequired
 from operations import BaseReader
 from forms import BaseForm
@@ -7,6 +7,7 @@ from forms import BaseForm
 class ImarisReaderForm(BaseForm):
     operation = StringField('Operation', validators=[DataRequired()], default='imaris_reader', render_kw={"disabled": True})
     channel = StringField('Channel (number, starting with 0)', default='0')
+    all_channels = BooleanField("Extract all channels")
     resolution_level = StringField('Resolution level (number, starting with 0)', default='0')
 
 
