@@ -70,3 +70,9 @@ class ResNetClassificationForm(BaseForm):
 class Unet3DForm(BaseForm):
     operation = StringField('Operation', validators=[DataRequired()], default='unet_3d', render_kw={"disabled": True})
     model = StringField('Model path', validators=[DataRequired()])
+
+
+class DeleteBGDetectionsForm(BaseForm):
+    operation = StringField('Operation', validators=[DataRequired()], default='delete_background_detections', render_kw={"disabled": True})
+    cell_candidates_path = StringField('Detected cells path', validators=[DataRequired()])
+    fg_mask_path = StringField('Foreground mask path', validators=[DataRequired()])
