@@ -6,6 +6,7 @@ from wtforms.validators import DataRequired
 class BaseForm(FlaskForm):
     input = StringField('Input Location', validators=[DataRequired()])
     output = StringField('Output Location', validators=[DataRequired()])
+    priority = StringField('Priority (0=lowest 5=highest)', default='2')
 
 
 class DeepBlinkForm(BaseForm):
