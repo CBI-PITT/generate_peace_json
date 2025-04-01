@@ -77,3 +77,9 @@ class DeleteBGDetectionsForm(BaseForm):
     operation = StringField('Operation', validators=[DataRequired()], default='delete_background_detections', render_kw={"disabled": True})
     cell_candidates_path = StringField('Detected cells path', validators=[DataRequired()])
     fg_mask_path = StringField('Foreground mask path', validators=[DataRequired()])
+
+
+class TransformPointsForm(BaseForm):
+    operation = StringField('Operation', validators=[DataRequired()], default='transform_points', render_kw={"disabled": True})
+    cells_path = StringField('Detected cells path', validators=[DataRequired()])
+    registration_path = StringField('Path to registration folder', validators=[DataRequired()])
