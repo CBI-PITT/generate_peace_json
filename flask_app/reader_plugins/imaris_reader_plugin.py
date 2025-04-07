@@ -9,6 +9,7 @@ class ImarisReaderForm(BaseForm):
     channel = StringField('Channel (number, starting with 0)', default='0')
     all_channels = BooleanField("Extract all channels")
     resolution_level = StringField('Resolution level (number, starting with 0)', default='0')
+    compress = BooleanField("Compressed and tiled tiffs")
 
 
 class ImarisReaderPlugin(BaseReader):
