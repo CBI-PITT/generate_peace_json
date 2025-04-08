@@ -30,17 +30,21 @@
             <label class="form-label">Metadata</label>
             <div id="metadata-container">
                 {% for subform in form.metadata %}
-                    <div class="mb-3 d-flex gap-2">
+                    <div class="mb-3 d-flex gap-2 align-items-end metadata-pair">
                         {% for subfield in subform %}
                             <div>
                                 {{ subfield.label(class="form-label") }}
                                 {{ subfield(class="form-control") }}
                             </div>
                         {% endfor %}
+                        {% if not loop.first %}
+                            <button type="button" class="btn btn-danger btn-sm" onclick="removeMetadata(this)">Remove</button>
+                        {% endif %}
                     </div>
                 {% endfor %}
             </div>
-            <button type="button" class="btn btn-secondary" onclick="addMetadata()">Add Metadata</button>
+
+            <button type="button" class="btn btn-secondary" onclick="addMetadata()">Add More Metadata</button>
 
             <button type="submit" class="btn btn-success">Submit</button>
         </form>
@@ -51,7 +55,7 @@
         const container = document.getElementById("metadata-container");
         const index = container.children.length;
         const html = `
-            <div class="mb-3 d-flex gap-2">
+            <div class="mb-3 d-flex gap-2 align-items-end metadata-pair">
                 <div>
                     <label for="metadata-${index}-key" class="form-label">Key</label>
                     <input class="form-control" id="metadata-${index}-key" name="metadata-${index}-key" type="text">
@@ -60,9 +64,17 @@
                     <label for="metadata-${index}-value" class="form-label">Value</label>
                     <input class="form-control" id="metadata-${index}-value" name="metadata-${index}-value" type="text">
                 </div>
+                <button type="button" class="btn btn-danger btn-sm" onclick="removeMetadata(this)">Remove</button>
             </div>
         `;
         container.insertAdjacentHTML('beforeend', html);
+    }
+
+    function removeMetadata(button) {
+        const pair = button.closest('.metadata-pair');
+        if (pair) {
+            pair.remove();
+        }
     }
 </script>
 {% endblock %}
