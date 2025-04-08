@@ -110,6 +110,7 @@ def operation_form(operation):
         return f"Operation '{operation}' not supported", 404
     form_class = plugin.get_form()
     form = form_class()
+    template = plugin.get_template()
     if request.method == 'POST':
         form = form_class(request.form)
         if form.validate():
@@ -120,7 +121,7 @@ def operation_form(operation):
             # Redirect to the home page
             return redirect(url_for('index'))
 
-    return render_template('form.html', form=form, operation=operation)
+    return render_template(template, form=form, operation=operation)
 
 
 @app.route('/queue')

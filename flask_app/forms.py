@@ -1,5 +1,5 @@
 from flask_wtf import FlaskForm
-from wtforms import StringField, SubmitField, FieldList, FormField, BooleanField
+from wtforms import Form, StringField, SubmitField, FieldList, FormField, BooleanField
 from wtforms.validators import DataRequired
 
 
@@ -83,3 +83,14 @@ class TransformPointsForm(BaseForm):
     operation = StringField('Operation', validators=[DataRequired()], default='transform_points', render_kw={"disabled": True})
     cells_path = StringField('Detected cells path', validators=[DataRequired()])
     registration_path = StringField('Path to registration folder', validators=[DataRequired()])
+
+
+class MetaFieldForm(Form):
+    key = StringField('Key', validators=[DataRequired()])
+    value = StringField('Value', validators=[DataRequired()])
+
+
+class CombineWithMetadataForm(BaseForm):
+    operation = StringField('Operation', validators=[DataRequired()], default='combine_with_metadata', render_kw={"disabled": True})
+    cells_path = StringField('Cells CSV path', validators=[DataRequired()])
+    metadata = FieldList(FormField(MetaFieldForm), min_entries=1)

@@ -16,6 +16,9 @@ class BaseOperation:
         """
         raise NotImplementedError("Plugins must implement the 'get_form' method.")
 
+    def get_template(self):
+        return 'form.html'
+
     def process_data(self, form):
         json_data = {
             "input": form.input.data,
@@ -47,6 +50,9 @@ class BaseReader:
         Each plugin must override this method.
         """
         raise NotImplementedError("Plugins must implement the 'get_form' method.")
+
+    def get_template(self):
+        return 'form.html'
 
     def process_data(self, form):
         # Example processing logic for filter operation

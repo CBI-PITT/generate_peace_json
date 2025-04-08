@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+
+{% block title %}{{ operation.capitalize() }} Form{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">{{ operation.capitalize() }} Settings</h2>
+    </div>
+    <div class="card-body">
+        <form method="post" class="needs-validation" novalidate>
+            {{ form.hidden_tag() }}
+            {% for field in form %}
+                {% if field.widget.input_type != 'hidden' %}
+                    <div class="mb-3">
+                    {% if field.type == 'BooleanField' %}
+                        <div class="form-check">
+                            {{ field(class="form-check-input") }}
+                            {{ field.label(class="form-check-label") }}
+                        </div>
+                    {% elif field.type == 'FieldList' %}
+                        <div></div>
+                    {% else %}
+                        {{ field.label(class="form-label") }}
+                        {{ field(class="form-control") }}
+                    {% endif %}
+                    </div>
+                {% endif %}
+            {% endfor %}
+            <label class="form-label">Metadata</label>
+            <div id="metadata-container">
+                {% for subform in form.metadata %}
+                    <div class="mb-3 d-flex gap-2">
+                        {% for subfield in subform %}
+                            <div>
+                                {{ subfield.label(class="form-label") }}
+                                {{ subfield(class="form-control") }}
+                            </div>
+                        {% endfor %}
+                    </div>
+                {% endfor %}
+            </div>
+            <button type="button" class="btn btn-secondary" onclick="addMetadata()">Add Metadata</button>
+
+            <button type="submit" class="btn btn-success">Submit</button>
+        </form>
+    </div>
+</div>
+<script>
+    function addMetadata() {
+        const container = document.getElementById("metadata-container");
+        const index = container.children.length;
+        const html = `
+            <div class="mb-3 d-flex gap-2">
+                <div>
+                    <label for="metadata-${index}-key" class="form-label">Key</label>
+                    <input class="form-control" id="metadata-${index}-key" name="metadata-${index}-key" type="text">
+                </div>
+                <div>
+                    <label for="metadata-${index}-value" class="form-label">Value</label>
+                    <input class="form-control" id="metadata-${index}-value" name="metadata-${index}-value" type="text">
+                </div>
+            </div>
+        `;
+        container.insertAdjacentHTML('beforeend', html);
+    }
+</script>
+{% endblock %}
