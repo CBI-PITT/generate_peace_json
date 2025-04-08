@@ -4,6 +4,7 @@ from forms import DeepBlinkForm
 
 class DeepBlink(BaseOperation):
     name = "deepblink"
+    category = "cell_detection"
     description = "Detect puncta in 3D image stack using deep neural network"
 
     def get_form(self):

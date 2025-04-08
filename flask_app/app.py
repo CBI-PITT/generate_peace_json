@@ -75,15 +75,39 @@ def get_op_descriptions(ops):
     return descriptions
 
 
+def get_op_categories(ops):
+    categories = []
+    for operation in ops:
+        if operation in OPERATIONS:
+            plugin = OPERATIONS.get(operation)
+        elif operation in PLUGINS:
+            plugin = PLUGINS.get(operation)
+        elif operation in READER_PLUGINS:
+            plugin = READER_PLUGINS.get(operation)
+        categories.append(plugin.category)
+    return categories
+
+
 @app.route('/')
 def index():
     return render_template('index.html', operations=[])
 
 
-@app.route('/analyze')
-def analyze():
+@app.route('/categories')
+def categories():
     operations = list(OPERATIONS.keys())
     operations.extend(PLUGINS.keys())
+    categories = list(set(get_op_categories(operations)))
+    return render_template('categories.html', categories=categories)
+
+
+@app.route('/analyze/<category>')
+def analyze(category):
+    # operations = list(OPERATIONS.keys())
+    # operations.extend(PLUGINS.keys())
+    operations = OPERATIONS.copy()
+    operations.update(PLUGINS.copy())
+    operations = [x for x in operations.keys() if operations[x].category == category]
     descriptions = get_op_descriptions(operations)
     return render_template('operations.html', operations=operations, descriptions=descriptions)
 

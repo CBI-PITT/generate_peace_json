@@ -4,6 +4,8 @@ from forms import AntsForm
 
 class Ants(BaseOperation):
     name = "ants"
+    category = "registration"
+    description = "Register brain to an atlas"
 
     def get_form(self):
         return AntsForm

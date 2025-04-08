@@ -7,6 +7,7 @@ from config import JSON_FOLDER
 
 class BaseOperation:
     name = "Base"
+    category = "other"
     description = "Description will be added"
 
     def get_form(self):
@@ -43,6 +44,7 @@ class BaseOperation:
 class BaseReader:
     name = "Base"
     description = "Description will be added"
+    category = "reader"
 
     def get_form(self):
         """
