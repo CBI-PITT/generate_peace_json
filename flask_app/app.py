@@ -1,3 +1,4 @@
+import json
 import importlib
 import os
 
@@ -171,6 +172,21 @@ def slurm_queue():
     except:
         print("ERROR: Couldn't get job list")
     return render_template('queue.html', queue=jobs)
+
+
+@app.route('/get_output_dir', methods=['POST'])
+def get_output_dir():
+    print("Inside the view")
+    print("request.json", request.json)
+    input_dir = request.json.get('input')
+    dataset_info_path = os.path.join(input_dir, '.dataset_info.json')
+
+    try:
+        with open(dataset_info_path, 'r') as f:
+            data = json.load(f)
+            return jsonify({'output': data.get('base_output_dir', '')})
+    except Exception as e:
+        return jsonify({'output': '', 'error': str(e)}), 400
 
 
 if __name__ == '__main__':

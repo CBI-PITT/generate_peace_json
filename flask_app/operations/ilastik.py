@@ -10,6 +10,9 @@ class Ilastik(BaseOperation):
     def get_form(self):
         return IlastikForm
 
+    def get_template(self):
+        return "form_autofill_output.html"
+
     # def process_data(self, form):
     #     # Example processing logic for filter operation
     #     json_data = {
