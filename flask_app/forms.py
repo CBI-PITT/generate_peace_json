@@ -64,12 +64,16 @@ class Unet3DForm(BaseForm):
 
 
 class DeleteBGDetectionsForm(BaseForm):
+    input = HiddenField()
+    output = HiddenField()
     operation = HiddenField('Operation', validators=[DataRequired()], default='delete_background_detections')
     cell_candidates_path = StringField('Detected cells path', validators=[DataRequired()])
     fg_mask_path = StringField('Foreground mask path', validators=[DataRequired()])
 
 
 class TransformPointsForm(BaseForm):
+    input = HiddenField()
+    output = HiddenField()
     operation = HiddenField('Operation', validators=[DataRequired()], default='transform_points')
     cells_path = StringField('Detected cells path', validators=[DataRequired()])
     registration_path = StringField('Path to registration folder', validators=[DataRequired()])
@@ -81,6 +85,8 @@ class MetaFieldForm(Form):
 
 
 class CombineWithMetadataForm(BaseForm):
+    input = HiddenField()
+    output = HiddenField()
     operation = HiddenField('Operation', validators=[DataRequired()], default='combine_with_metadata')
     cells_path = StringField('Cells CSV path', validators=[DataRequired()])
     metadata = FieldList(FormField(MetaFieldForm), min_entries=1)
