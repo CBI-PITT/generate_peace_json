@@ -4,11 +4,14 @@ import os
 
 from flask import Flask, render_template, request, jsonify, redirect, url_for
 from flask import flash
+from flask import render_template_string
 
 from operations import BaseOperation, BaseReader
+from workflows import BaseWorkflow
 
 # from flask_file_browser import extended_app
 from flask_file_browser import routes
+from config import JSON_FOLDER
 
 
 app = Flask(__name__)
@@ -176,8 +179,6 @@ def slurm_queue():
 
 @app.route('/get_output_dir', methods=['POST'])
 def get_output_dir():
-    print("Inside the view")
-    print("request.json", request.json)
     input_dir = request.json.get('input')
     dataset_info_path = os.path.join(input_dir, '.dataset_info.json')
 
@@ -187,6 +188,86 @@ def get_output_dir():
             return jsonify({'output': data.get('base_output_dir', '')})
     except Exception as e:
         return jsonify({'output': '', 'error': str(e)}), 400
+
+
+def save_to_json(workflow):
+    import uuid, json, os
+    wf_data = {"steps": workflow.steps}
+    fname = f"workflow_{uuid.uuid4().hex}.json"
+    with open(os.path.join(JSON_FOLDER, "workflows", fname), "w") as f:
+        json.dump(wf_data, f, indent=2)
+
+
+@app.route("/workflow/new", methods=["GET", "POST"])
+def create_workflow():
+    if request.method == "POST":
+        data = request.get_json()
+        workflow = BaseWorkflow()
+        for step in data["steps"]:
+            workflow.add_step(
+                input=step["input"],
+                output=step["output"],
+                operation=step["operation"],
+                extras=step["extras"]
+            )
+        save_to_json(workflow)
+        return jsonify({"status": "ok"})
+
+    # Provide available operations to dropdown
+    all_operations = {}
+    all_operations.update(OPERATIONS)
+    all_operations.update(PLUGINS)
+    all_operations.update(READER_PLUGINS)
+    available_ops = all_operations.keys()
+    return render_template("create_workflow.html", available_operations=available_ops)
+
+
+def render_operation_form(operation, as_fragment=True):
+    # Dynamically get the form class and instantiate it
+    if operation in OPERATIONS:
+        # load default operations
+        plugin = OPERATIONS.get(operation)
+    elif operation in PLUGINS:
+        # load plugins
+        plugin = PLUGINS.get(operation)
+    elif operation in READER_PLUGINS:
+        # load reader plugins
+        plugin = READER_PLUGINS.get(operation)
+    else:
+        return f"Operation '{operation}' not supported", 404
+    form_class = plugin.get_form()
+    form = form_class()
+
+    if not as_fragment:
+        return render_template("form.html", form=form)
+
+    # Partial template for embedding into the workflow builder
+    fragment = """
+    {{ form.hidden_tag() }}
+    {% for field in form %}
+        {% if field.widget.input_type != 'hidden' %}
+            <div class="mb-3">
+            {% if field.type == 'BooleanField' %}
+                <div class="form-check">
+                    {{ field(class="form-check-input") }}
+                    {{ field.label(class="form-check-label") }}
+                </div>
+            {% else %}
+                {{ field.label(class="form-label") }}
+                {{ field(class="form-control") }}
+            {% endif %}
+            </div>
+        {% endif %}
+    {% endfor %}
+    """
+    return render_template_string(fragment, form=form)
+
+
+@app.route("/workflow/operation_form", methods=["POST"])
+def get_operation_form():
+    operation = request.form["operation"]
+    form_html = render_operation_form(operation, as_fragment=True)
+    return jsonify({"form_html": form_html})
 
 
 if __name__ == '__main__':

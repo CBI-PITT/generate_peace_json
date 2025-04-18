@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% block title %}Create Workflow{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+        <h2 class="mb-4">Create a New Workflow</h2>
+
+        <!-- Operation Selection -->
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="row g-3 align-items-center">
+                    <div class="col-md-5">
+                        <label for="operation" class="form-label">Select Operation</label>
+                        <select id="operation" class="form-select">
+                            <option value="">-- Choose an operation --</option>
+                            {% for op in available_operations %}
+                                <option value="{{ op }}">{{ op }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3 align-self-end">
+                        <button id="load-operation" class="btn btn-primary">Load Settings</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Dynamic Form -->
+        <div id="form-container" class="mb-4"></div>
+
+        <!-- Additional Controls -->
+        <div id="operation-controls" class="card mb-4" style="display: none;">
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-5">
+                        <label for="input-source" class="form-label">Input (from previous step)</label>
+                        <select id="input-source" class="form-select">
+                            <option value="">None</option>
+                        </select>
+                    </div>
+                    <div class="col-md-5">
+                        <label for="output-name" class="form-label">Output Name</label>
+                        <input type="text" id="output-name" class="form-control" placeholder="e.g., transformed_data">
+                    </div>
+                    <div class="col-md-2 d-grid align-items-end">
+                        <button id="add-step" class="btn btn-success mt-3">Add Step</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Workflow Preview -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">Workflow Steps</h5>
+            </div>
+            <ul class="list-group list-group-flush" id="workflow-steps"></ul>
+        </div>
+
+        <!-- Submit -->
+        <div class="d-grid">
+            <button id="submit-workflow" class="btn btn-dark btn-lg">Save Workflow</button>
+        </div>
+    </div>
+{% endblock %}
+
+{% block scripts %}
+    <!-- JavaScript logic -->
+    <script>
+        let workflow = { steps: [] };
+
+        $("#load-operation").on("click", function () {
+            const op = $("#operation").val();
+            if (!op) return;
+
+            $.post("/workflow/operation_form", { operation: op }, function (data) {
+                $("#form-container").html(`<div class="card"><div class="card-body">${data.form_html}</div></div>`);
+                $("#operation-controls").show();
+            });
+        });
+
+        $("#add-step").on("click", function () {
+            const operation = $("#operation").val();
+            const input = $("#input-source").val();
+            const output = $("#output-name").val();
+
+        const formData = {};
+        $("#form-container").find("input, select, textarea").each(function () {
+            const name = $(this).attr("name");
+            if (!name) return;
+
+            if ($(this).attr("type") === "checkbox") {
+                formData[name] = $(this)[0].checked;
+            } else {
+                formData[name] = $(this).val();
+            }
+        });
+
+            workflow.steps.push({
+                input,
+                output,
+                operation,
+                extras: formData
+            });
+
+            // Add output to input dropdown for future steps
+            $("#input-source").append(`<option value="${output}">${output}</option>`);
+
+            // Render step in UI
+            const stepNumber = workflow.steps.length;
+            $("#workflow-steps").append(`
+                <li class="list-group-item">
+                    <strong>Step ${stepNumber}:</strong> ${operation}
+                    <span class="text-muted">(input: ${input || 'none'}, output: ${output})</span>
+                </li>
+            `);
+
+            // Reset form
+            $("#form-container").empty();
+            $("#operation-controls").hide();
+            $("#output-name").val("");
+        });
+
+        $("#submit-workflow").on("click", function () {
+            $.ajax({
+                url: "/workflow/new",
+                method: "POST",
+                contentType: "application/json",
+                data: JSON.stringify(workflow),
+                success: function () {
+                    alert("Workflow saved!");
+                    workflow.steps = [];
+                    $("#workflow-steps").empty();
+                    $("#input-source").html('<option value="">None</option>');
+                }
+            });
+        });
+    </script>
+{% endblock %}
