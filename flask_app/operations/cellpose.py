@@ -10,6 +10,9 @@ class Cellpose(BaseOperation):
     def get_form(self):
         return CellposeForm
 
+    def get_template(self):
+        return "form_autofill_output.html"
+
     # def process_data(self, form):
     #     # Example processing logic for filter operation
     #     json_data = {
