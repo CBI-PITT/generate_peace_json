@@ -53,6 +53,8 @@ class CellposeForm(BaseForm):
 
 
 class ResNetClassificationForm(BaseForm):
+    input = HiddenField()
+    output = HiddenField()
     operation = HiddenField('Operation', validators=[DataRequired()], default='resnet_classification')
     cell_candidates_path = StringField('Detected cells path', validators=[DataRequired()])
     model_path = StringField('Model path', validators=[DataRequired()])
