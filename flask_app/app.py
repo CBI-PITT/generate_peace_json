@@ -218,8 +218,12 @@ def create_workflow():
     all_operations = {}
     all_operations.update(OPERATIONS)
     all_operations.update(PLUGINS)
-    all_operations.update(READER_PLUGINS)
-    available_ops = all_operations.keys()
+    categories = get_op_categories(all_operations.keys())
+    available_ops = {}
+    available_ops['readers'] = READER_PLUGINS.keys()
+    for category in categories:
+        category_ops = [x for x in all_operations.keys() if all_operations[x].category == category]
+        available_ops[category] = category_ops
     return render_template("create_workflow.html", available_operations=available_ops)
 
 

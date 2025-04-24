@@ -12,10 +12,14 @@
                     <div class="col-md-5">
                         <label for="operation" class="form-label">Select Operation</label>
                         <select id="operation" class="form-select">
-                            <option value="">-- Choose an operation --</option>
-                            {% for op in available_operations %}
+                          <option value="">-- Choose an operation --</option>
+                          {% for category, operations in available_operations.items() %}
+                            <optgroup label="{{ category }}">
+                              {% for op in operations %}
                                 <option value="{{ op }}">{{ op }}</option>
-                            {% endfor %}
+                              {% endfor %}
+                            </optgroup>
+                          {% endfor %}
                         </select>
                     </div>
                     <div class="col-md-3 align-self-end">
