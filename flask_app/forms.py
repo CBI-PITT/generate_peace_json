@@ -1,5 +1,5 @@
 from flask_wtf import FlaskForm
-from wtforms import Form, StringField, FieldList, FormField, BooleanField, HiddenField, RadioField, IntegerField
+from wtforms import Form, StringField, FieldList, FormField, BooleanField, HiddenField, RadioField, IntegerField, SelectField
 from wtforms.validators import DataRequired
 
 
@@ -18,7 +18,11 @@ class BrainRegForm(BaseForm):
     operation = HiddenField('Operation', validators=[DataRequired()], default='brainreg')
     atlas = StringField('Atlas (atlas name from Brainglobe Atlas API)', default='allen_mouse_25um')
     orientation = StringField('Orientation (three-letter string)', default='sal')
-    brain_geometry = StringField('Brain Geometry (full / hemisphere_l / hemisphere_r)', default='full')
+    brain_geometry = SelectField(
+        'Brain Geometry',
+        choices=[('full', 'full'), ('hemisphere_l', 'hemisphere_l'), ('hemisphere_r', 'hemisphere_r')],
+        default='full'
+    )
 
 
 class CellFinderForm(BaseForm):

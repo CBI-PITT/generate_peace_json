@@ -267,6 +267,9 @@ def render_operation_form(operation, as_fragment=True):
                         </div>
                     {% endfor %}
                 </div>
+            {% elif field.type == 'SelectField' %}
+                {{ field.label(class="form-label") }}
+                {{ field(class="form-select", **{'data-bindable': 'false'}) }}
             {% else %}
                 {{ field.label(class="form-label") }}
                 {{ field(class="form-control", **{'data-bindable': 'true'}) }}
