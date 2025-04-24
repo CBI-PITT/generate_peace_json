@@ -33,10 +33,11 @@
             <div class="card-body">
                 <div class="row g-3">
                     <div class="col-md-5">
-                        <label for="input-source" class="form-label">Input (from previous step)</label>
-                        <select id="input-source" class="form-select">
+                        <label for="input-source" class="form-label">Inputs (from previous steps)</label>
+                        <select id="input-source" class="form-select" multiple>
                             <option value="">None</option>
                         </select>
+                        <div class="form-text">Hold Ctrl/Cmd to select multiple inputs</div>
                     </div>
                     <div class="col-md-5">
                         <label for="output-name" class="form-label">Output Name</label>
@@ -67,73 +68,111 @@
 {% block scripts %}
     <!-- JavaScript logic -->
     <script>
-        let workflow = { steps: [] };
+let workflow = { steps: [] };
 
-        $("#load-operation").on("click", function () {
-            const op = $("#operation").val();
-            if (!op) return;
+// Load the operation form and inject bindable dropdowns
+$("#load-operation").on("click", function () {
+    const op = $("#operation").val();
+    if (!op) return;
 
-            $.post("/workflow/operation_form", { operation: op }, function (data) {
-                $("#form-container").html(`<div class="card"><div class="card-body">${data.form_html}</div></div>`);
-                $("#operation-controls").show();
-            });
+    $.post("/workflow/operation_form", { operation: op }, function (data) {
+        $("#form-container").html(`<div class="card"><div class="card-body">${data.form_html}</div></div>`);
+        $("#operation-controls").show();
+        addOutputBindings();  // <-- insert dropdowns for binding previous outputs
+    });
+});
+
+// Add step to workflow
+$("#add-step").on("click", function () {
+    const operation = $("#operation").val();
+    const output = $("#output-name").val();
+
+    // Collect field-to-output bindings
+    const inputBindings = {};
+    $("#form-container").find("select[data-bind-target]").each(function () {
+        const field = $(this).attr("data-bind-target");
+        const val = $(this).val();
+        if (val) inputBindings[field] = val;
+    });
+
+    // Collect form data (excluding bound fields)
+    const formData = {};
+    $("#form-container").find("input, select, textarea").each(function () {
+        const name = $(this).attr("name");
+        if (!name || name in inputBindings) return; // skip bound inputs
+
+        if ($(this).attr("type") === "checkbox") {
+            formData[name] = $(this).is(":checked");
+        } else {
+            formData[name] = $(this).val();
+        }
+    });
+
+    workflow.steps.push({
+        input: inputBindings,  // now a dict of form_field: previous_output
+        output,
+        operation,
+        extras: formData
+    });
+
+    // Append new output to multi-select
+    $("#input-source").append(`<option value="${output}">${output}</option>`);
+
+    // Show step in summary
+    const stepNumber = workflow.steps.length;
+    $("#workflow-steps").append(`
+        <li class="list-group-item">
+            <strong>Step ${stepNumber}:</strong> ${operation}
+            <span class="text-muted">
+                (inputs: ${Object.entries(inputBindings).map(([k, v]) => `${k} ← ${v}`).join(", ") || 'none'},
+                output: ${output})
+            </span>
+        </li>
+    `);
+
+    // Reset
+    $("#form-container").empty();
+    $("#operation-controls").hide();
+    $("#output-name").val("");
+});
+
+// Save entire workflow
+$("#submit-workflow").on("click", function () {
+    $.ajax({
+        url: "/workflow/new",
+        method: "POST",
+        contentType: "application/json",
+        data: JSON.stringify(workflow),
+        success: function () {
+            alert("Workflow saved!");
+            workflow.steps = [];
+            $("#workflow-steps").empty();
+            $("#input-source").html('<option value="">None</option>');
+        }
+    });
+});
+
+// Add dropdowns to bind fields to previous step outputs
+function addOutputBindings() {
+    const outputs = workflow.steps.map(s => s.output);
+    $("#form-container").find("input[data-bindable='true'], select[data-bindable='true'], textarea[data-bindable='true']").each(function () {
+        const fieldName = $(this).attr("name");
+        if (!fieldName) return;
+
+        const label = $(`label[for='${fieldName}']`);
+        const wrapper = $("<div class='form-text small text-muted mb-2'>Link this field to output of a previous step:</div>");
+
+        const bindingSelector = $("<select class='form-select form-select-sm mt-1'>")
+            .attr("data-bind-target", fieldName)
+            .append(`<option value="">-- None --</option>`);
+
+        outputs.forEach(output => {
+            bindingSelector.append(`<option value="${output}">${output}</option>`);
         });
 
-        $("#add-step").on("click", function () {
-            const operation = $("#operation").val();
-            const input = $("#input-source").val();
-            const output = $("#output-name").val();
-
-        const formData = {};
-        $("#form-container").find("input, select, textarea").each(function () {
-            const name = $(this).attr("name");
-            if (!name) return;
-
-            if ($(this).attr("type") === "checkbox") {
-                formData[name] = $(this)[0].checked;
-            } else {
-                formData[name] = $(this).val();
-            }
-        });
-
-            workflow.steps.push({
-                input,
-                output,
-                operation,
-                extras: formData
-            });
-
-            // Add output to input dropdown for future steps
-            $("#input-source").append(`<option value="${output}">${output}</option>`);
-
-            // Render step in UI
-            const stepNumber = workflow.steps.length;
-            $("#workflow-steps").append(`
-                <li class="list-group-item">
-                    <strong>Step ${stepNumber}:</strong> ${operation}
-                    <span class="text-muted">(input: ${input || 'none'}, output: ${output})</span>
-                </li>
-            `);
-
-            // Reset form
-            $("#form-container").empty();
-            $("#operation-controls").hide();
-            $("#output-name").val("");
-        });
-
-        $("#submit-workflow").on("click", function () {
-            $.ajax({
-                url: "/workflow/new",
-                method: "POST",
-                contentType: "application/json",
-                data: JSON.stringify(workflow),
-                success: function () {
-                    alert("Workflow saved!");
-                    workflow.steps = [];
-                    $("#workflow-steps").empty();
-                    $("#input-source").html('<option value="">None</option>');
-                }
-            });
-        });
+        $(this).after(bindingSelector);
+        $(this).after(wrapper);
+    });
+}
     </script>
 {% endblock %}

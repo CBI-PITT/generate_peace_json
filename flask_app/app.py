@@ -1,6 +1,7 @@
 import json
 import importlib
 import os
+from datetime import datetime
 
 from flask import Flask, render_template, request, jsonify, redirect, url_for
 from flask import flash
@@ -191,9 +192,9 @@ def get_output_dir():
 
 
 def save_to_json(workflow):
-    import uuid, json, os
     wf_data = {"steps": workflow.steps}
-    fname = f"workflow_{uuid.uuid4().hex}.json"
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    fname = f"SLURM_workflow_{timestamp}.json"
     with open(os.path.join(JSON_FOLDER, "workflows", fname), "w") as f:
         json.dump(wf_data, f, indent=2)
 
@@ -249,12 +250,12 @@ def render_operation_form(operation, as_fragment=True):
             <div class="mb-3">
             {% if field.type == 'BooleanField' %}
                 <div class="form-check">
-                    {{ field(class="form-check-input") }}
+                    {{ field(class="form-check-input", **{'data-bindable': 'false'}) }}
                     {{ field.label(class="form-check-label") }}
                 </div>
             {% else %}
                 {{ field.label(class="form-label") }}
-                {{ field(class="form-control") }}
+                {{ field(class="form-control", **{'data-bindable': 'true'}) }}
             {% endif %}
             </div>
         {% endif %}
