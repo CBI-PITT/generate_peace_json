@@ -145,13 +145,16 @@ $("#submit-workflow").on("click", function () {
 // Add dropdowns to bind fields to previous step outputs
 function addOutputBindings() {
     const outputs = workflow.steps.map(s => s.output);
+
     $("#form-container").find("input[data-bindable='true'], select[data-bindable='true'], textarea[data-bindable='true']").each(function () {
-        const fieldName = $(this).attr("name");
+        const fieldEl = $(this);
+        const fieldName = fieldEl.attr("name");
         if (!fieldName) return;
 
         const label = $(`label[for='${fieldName}']`);
         const wrapper = $("<div class='form-text small text-muted mb-2'>Link this field to output of a previous step:</div>");
 
+        // Create the binding dropdown
         const bindingSelector = $("<select class='form-select form-select-sm mt-1'>")
             .attr("data-bind-target", fieldName)
             .append(`<option value="">-- None --</option>`);
@@ -160,8 +163,18 @@ function addOutputBindings() {
             bindingSelector.append(`<option value="${output}">${output}</option>`);
         });
 
-        $(this).after(bindingSelector);
-        $(this).after(wrapper);
+        // Watch for change
+        bindingSelector.on("change", function () {
+            const selectedOutput = $(this).val();
+            if (selectedOutput) {
+                fieldEl.prop("disabled", true).addClass("bg-light text-muted");
+            } else {
+                fieldEl.prop("disabled", false).removeClass("bg-light text-muted");
+            }
+        });
+
+        fieldEl.after(bindingSelector);
+        fieldEl.after(wrapper);
     });
 }
     </script>
