@@ -4,10 +4,14 @@ from forms import ContrastStretchForm
 
 class StretchContrast(BaseOperation):
     name = "stretch_contrast"
+    category = "pre_processing"
     description = "Rescale image intensities between 2 and 98%"
 
     def get_form(self):
         return ContrastStretchForm
+
+    def get_template(self):
+        return "form_autofill_output.html"
 
     # def process_data(self, form):
     #     # Example processing logic for filter operation

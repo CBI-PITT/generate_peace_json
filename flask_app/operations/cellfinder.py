@@ -4,10 +4,14 @@ from forms import CellFinderForm
 
 class CellFinder(BaseOperation):
     name = "cellfinder"
+    category = "cell_detection"
     description = "Detect cells (puncta) in a 3D image stack using threshold-based method"
 
     def get_form(self):
         return CellFinderForm
+
+    def get_template(self):
+        return "form_autofill_output.html"
 
     # def process_data(self, form):
     #     # Example processing logic for filter operation

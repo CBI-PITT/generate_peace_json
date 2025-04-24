@@ -1,0 +1,24 @@
+{% extends "form.html" %}
+{% block scripts %}
+<script>
+$(document).ready(function() {
+    $('#input').on('input', function() {
+        let inputDir = $(this).val();
+        if (inputDir) {
+            $.ajax({
+                url: '/get_output_dir',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ input: inputDir }),
+                success: function(response) {
+                    $('#output').val(response.output);
+                },
+                error: function() {
+                    $('#output').val('');
+                }
+            });
+        }
+    });
+});
+</script>
+{% endblock %}

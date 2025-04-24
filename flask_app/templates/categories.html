@@ -7,16 +7,13 @@
     <h1 class="my-4">Select an Operation</h1>
     <div class="container d-flex justify-content-center" style="min-height: 100vh;">
     <ul class="list-group">
+        {% for category in categories %}
         <li class="list-group-item">
-            <a href="{{ url_for('read') }}" class="btn btn-primary btn-block">
-                Read Data
+            <a href="{{ url_for('analyze', category=category) }}" class="btn btn-primary btn-block">
+                {{ category }}
             </a>
         </li>
-        <li class="list-group-item">
-            <a href="{{ url_for('categories') }}" class="btn btn-primary btn-block">
-                Process Data
-            </a>
-        </li>
+        {% endfor %}
     </ul>
     </div>
 </div>

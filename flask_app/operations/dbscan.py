@@ -4,6 +4,7 @@ from forms import DBSCANForm
 
 class DBSCAN(BaseOperation):
     name = "dbscan"
+    category = "post_processing"
     description = "Cluster puncta coordinates based on their distance and density"
 
     def get_form(self):

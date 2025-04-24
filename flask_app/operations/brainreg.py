@@ -4,10 +4,14 @@ from forms import BrainRegForm
 
 class BrainReg(BaseOperation):
     name = "brainreg"
+    category = "registration"
     description = "Register stack representing a 3D brain volume to an atlas from brainglobe atlas API"
 
     def get_form(self):
         return BrainRegForm
+
+    def get_template(self):
+        return "form_autofill_output.html"
 
     # def process_data(self, form):
     #     # Example processing logic for filter operation

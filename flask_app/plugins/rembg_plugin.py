@@ -12,10 +12,14 @@ class RembgForm(BaseForm):
 
 class RembgPlugin(BaseOperation):
     name = "rembg"
+    category = "pre_processing"
     description = "Remove image background using a neural net"
 
     def get_form(self):
         return RembgForm
+
+    def get_template(self):
+        return "form_autofill_output.html"
 
     # def process_data(self, form):
     #     # Example processing logic for filter operation

@@ -4,10 +4,14 @@ from forms import DeepBlinkForm
 
 class DeepBlink(BaseOperation):
     name = "deepblink"
+    category = "cell_detection"
     description = "Detect puncta in 3D image stack using deep neural network"
 
     def get_form(self):
         return DeepBlinkForm
+
+    def get_template(self):
+        return "form_autofill_output.html"
 
     # def process_data(self, form):
     #     # Example processing logic for filter operation
