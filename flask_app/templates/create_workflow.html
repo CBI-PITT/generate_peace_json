@@ -32,16 +32,9 @@
         <div id="operation-controls" class="card mb-4" style="display: none;">
             <div class="card-body">
                 <div class="row g-3">
-                    <div class="col-md-5">
-                        <label for="input-source" class="form-label">Inputs (from previous steps)</label>
-                        <select id="input-source" class="form-select" multiple>
-                            <option value="">None</option>
-                        </select>
-                        <div class="form-text">Hold Ctrl/Cmd to select multiple inputs</div>
-                    </div>
-                    <div class="col-md-5">
+                    <div class="col-md-10">
                         <label for="output-name" class="form-label">Output Name</label>
-                        <input type="text" id="output-name" class="form-control" placeholder="e.g., transformed_data">
+                        <input type="text" id="output-name" class="form-control" placeholder="e.g., processed_data">
                     </div>
                     <div class="col-md-2 d-grid align-items-end">
                         <button id="add-step" class="btn btn-success mt-3">Add Step</button>
@@ -99,7 +92,7 @@ $("#add-step").on("click", function () {
     const formData = {};
     $("#form-container").find("input, select, textarea").each(function () {
         const name = $(this).attr("name");
-        if (!name || name in inputBindings) return; // skip bound inputs
+        if (!name || name in inputBindings) return;
 
         if ($(this).attr("type") === "checkbox") {
             formData[name] = $(this).is(":checked");
@@ -109,16 +102,13 @@ $("#add-step").on("click", function () {
     });
 
     workflow.steps.push({
-        input: inputBindings,  // now a dict of form_field: previous_output
+        input: inputBindings,
         output,
         operation,
         extras: formData
     });
 
-    // Append new output to multi-select
-    $("#input-source").append(`<option value="${output}">${output}</option>`);
-
-    // Show step in summary
+    // Render step in UI
     const stepNumber = workflow.steps.length;
     $("#workflow-steps").append(`
         <li class="list-group-item">
