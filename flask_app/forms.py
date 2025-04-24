@@ -1,12 +1,12 @@
 from flask_wtf import FlaskForm
-from wtforms import Form, StringField, SubmitField, FieldList, FormField, BooleanField, HiddenField, RadioField
+from wtforms import Form, StringField, FieldList, FormField, BooleanField, HiddenField, RadioField, IntegerField
 from wtforms.validators import DataRequired
 
 
 class BaseForm(FlaskForm):
     input = StringField('Input Location', validators=[DataRequired()])
     output = StringField('Output Location', validators=[DataRequired()])
-    priority = RadioField('Priority (0=lowest 5=highest)', default='2', choices=[(str(i), str(i)) for i in range(1, 6)])
+    priority = RadioField('Priority (0=lowest 5=highest)', default='2', choices=[(str(i), str(i)) for i in range(6)])
 
 
 class DeepBlinkForm(BaseForm):
@@ -43,8 +43,8 @@ class IlastikForm(BaseForm):
 class DBSCANForm(BaseForm):
     operation = HiddenField('Operation', validators=[DataRequired()], default='dbscan')
     cell_candidates_path = StringField('Detected cells path', validators=[DataRequired()])
-    epsilon = StringField('Maximum Distance in Cluster', validators=[DataRequired()], default=3)
-    min_samples = StringField('Minimum Number of Samples in Cluster', validators=[DataRequired()], default=2)
+    epsilon = IntegerField('Maximum Distance in Cluster', validators=[DataRequired()], default=3)
+    min_samples = IntegerField('Minimum Number of Samples in Cluster', validators=[DataRequired()], default=2)
 
 
 class CellposeForm(BaseForm):

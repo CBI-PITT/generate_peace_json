@@ -108,7 +108,10 @@ $("#add-step").on("click", function () {
             if (checked !== undefined) {
                 formData[name] = checked;
             }
-            processedFields.add(name);  // Prevent collecting multiple times
+            processedFields.add(name);
+        } else if (type === "number") {
+            const val = $(this).val();
+            formData[name] = val === "" ? null : parseInt(val);
         } else {
             formData[name] = $(this).val();
         }
@@ -165,6 +168,11 @@ function addOutputBindings() {
         const fieldEl = $(this);
         const fieldName = fieldEl.attr("name");
         if (!fieldName) return;
+
+        const inputType = fieldEl.attr("type");
+
+        // Skip number fields (IntegerField / FloatField)
+        if (inputType === "number") return;
 
         const label = $(`label[for='${fieldName}']`);
         const wrapper = $("<div class='form-text small text-muted mb-2'>Link this field to output of a previous step:</div>");

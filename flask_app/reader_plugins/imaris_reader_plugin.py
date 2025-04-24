@@ -1,4 +1,4 @@
-from wtforms import StringField, SubmitField, Form, BooleanField, HiddenField
+from wtforms import StringField, SubmitField, Form, BooleanField, HiddenField, IntegerField
 from wtforms.validators import DataRequired
 from operations import BaseReader
 from forms import BaseForm
@@ -6,9 +6,9 @@ from forms import BaseForm
 
 class ImarisReaderForm(BaseForm):
     operation = HiddenField('Operation', validators=[DataRequired()], default='imaris_reader')
-    channel = StringField('Channel (number, starting with 0)', default='0')
+    channel = IntegerField('Channel (number, starting with 0)', default='0')
     all_channels = BooleanField("Extract all channels")
-    resolution_level = StringField('Resolution level (number, starting with 0)', default='0')
+    resolution_level = IntegerField('Resolution level (number, starting with 0)', default='0')
     compress = BooleanField("Compressed and tiled tiffs")
 
 
