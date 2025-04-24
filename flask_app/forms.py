@@ -1,12 +1,12 @@
 from flask_wtf import FlaskForm
-from wtforms import Form, StringField, SubmitField, FieldList, FormField, BooleanField, HiddenField
+from wtforms import Form, StringField, SubmitField, FieldList, FormField, BooleanField, HiddenField, RadioField
 from wtforms.validators import DataRequired
 
 
 class BaseForm(FlaskForm):
     input = StringField('Input Location', validators=[DataRequired()])
     output = StringField('Output Location', validators=[DataRequired()])
-    priority = StringField('Priority (0=lowest 5=highest)', default='2')
+    priority = RadioField('Priority (0=lowest 5=highest)', default='2', choices=[(str(i), str(i)) for i in range(1, 6)])
 
 
 class DeepBlinkForm(BaseForm):

@@ -63,8 +63,7 @@
 {% endblock %}
 
 {% block scripts %}
-    <!-- JavaScript logic -->
-    <script>
+<script>
 let workflow = { steps: [] };
 
 // Load the operation form and inject bindable dropdowns
@@ -94,15 +93,27 @@ $("#add-step").on("click", function () {
 
     // Collect form data (excluding bound fields)
     const formData = {};
+    const processedFields = new Set();
+
     $("#form-container").find("input, select, textarea").each(function () {
         const name = $(this).attr("name");
-        if (!name || name in inputBindings) return;
+        if (!name || name in inputBindings || processedFields.has(name)) return;
 
-        if ($(this).attr("type") === "checkbox") {
+        const type = $(this).attr("type");
+
+        if (type === "checkbox") {
             formData[name] = $(this).is(":checked");
+        } else if (type === "radio") {
+            const checked = $(`input[name="${name}"]:checked`).val();
+            if (checked !== undefined) {
+                formData[name] = checked;
+            }
+            processedFields.add(name);  // Prevent collecting multiple times
         } else {
             formData[name] = $(this).val();
         }
+
+        processedFields.add(name);
     });
 
     workflow.steps.push({
@@ -181,5 +192,5 @@ function addOutputBindings() {
         fieldEl.after(wrapper);
     });
 }
-    </script>
+</script>
 {% endblock %}

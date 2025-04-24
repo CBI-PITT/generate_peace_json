@@ -257,6 +257,16 @@ def render_operation_form(operation, as_fragment=True):
                     {{ field(class="form-check-input", **{'data-bindable': 'false'}) }}
                     {{ field.label(class="form-check-label") }}
                 </div>
+            {% elif field.type == 'RadioField' %}
+                <label class="form-label">{{ field.label.text }}</label>
+                <div class="d-flex gap-3">
+                    {% for subfield in field %}
+                        <div class="form-check form-check-inline">
+                            {{ subfield(class="form-check-input", **{'data-bindable': 'false'}) }}
+                            {{ subfield.label(class="form-check-label") }}
+                        </div>
+                    {% endfor %}
+                </div>
             {% else %}
                 {{ field.label(class="form-label") }}
                 {{ field(class="form-control", **{'data-bindable': 'true'}) }}
