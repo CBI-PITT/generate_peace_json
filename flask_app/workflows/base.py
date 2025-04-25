@@ -4,8 +4,8 @@ class BaseWorkflow:
 
     def add_step(self, input, output, operation, extras):
         self.steps.append({
-            "input": input,
-            "output": output,
+            "input_bindings": input,
+            "output_name": output,
             "operation": operation,
             "extras": extras,
         })

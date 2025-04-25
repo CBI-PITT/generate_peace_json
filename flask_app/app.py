@@ -262,7 +262,10 @@ def render_operation_form(operation, as_fragment=True):
     if not as_fragment:
         return render_template("form.html", form=form)
 
-    return render_template('form_fragment.html', form=form)
+    if operation in READER_PLUGINS:
+        return render_template('form_fragment.html', form=form)
+    else:
+        return render_template('form_fragment_no_output.html', form=form)
 
 
 @app.route("/workflow/operation_form", methods=["POST"])
