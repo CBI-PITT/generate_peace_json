@@ -262,48 +262,7 @@ def render_operation_form(operation, as_fragment=True):
     if not as_fragment:
         return render_template("form.html", form=form)
 
-    # Partial template for embedding into the workflow builder
-    fragment = """
-    {{ form.hidden_tag() }}
-    {% for field in form %}
-        {% if field.widget.input_type != 'hidden' %}
-            <div class="mb-3">
-            {% if field.type == 'BooleanField' %}
-                <div class="form-check">
-                    {{ field(class="form-check-input", **{'data-bindable': 'false'}) }}
-                    {{ field.label(class="form-check-label") }}
-                </div>
-            {% elif field.type == 'RadioField' %}
-                <label class="form-label">{{ field.label.text }}</label>
-                <div class="d-flex gap-3">
-                    {% for subfield in field %}
-                        <div class="form-check form-check-inline">
-                            {{ subfield(class="form-check-input", **{'data-bindable': 'false'}) }}
-                            {{ subfield.label(class="form-check-label") }}
-                        </div>
-                    {% endfor %}
-                </div>
-            {% elif field.type == 'SelectField' %}
-                {{ field.label(class="form-label") }}
-                {{ field(class="form-select", **{'data-bindable': 'false'}) }}
-            {% elif field.type == 'FormField' %}
-                <label class="form-label">{{ field.label.text }}</label>
-                <div class="d-flex gap-3">
-                    {% for subfield in field %}
-                        <div class="flex-fill">
-                            {{ subfield(class="form-select", **{'data-bindable': 'false'}) }}
-                        </div>
-                    {% endfor %}
-                </div>
-            {% else %}
-                {{ field.label(class="form-label") }}
-                {{ field(class="form-control", **{'data-bindable': 'true'}) }}
-            {% endif %}
-            </div>
-        {% endif %}
-    {% endfor %}
-    """
-    return render_template_string(fragment, form=form)
+    return render_template('form_fragment.html', form=form)
 
 
 @app.route("/workflow/operation_form", methods=["POST"])
