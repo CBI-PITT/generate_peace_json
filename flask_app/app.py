@@ -210,7 +210,7 @@ def save_to_json(workflow):
     wf_data = {"steps": workflow.steps}
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     fname = f"SLURM_workflow_{timestamp}.json"
-    with open(os.path.join(JSON_FOLDER, "workflows", fname), "w") as f:
+    with open(os.path.join(JSON_FOLDER, fname), "w") as f:
         json.dump(wf_data, f, indent=2)
 
 
