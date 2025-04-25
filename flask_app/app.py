@@ -191,6 +191,21 @@ def get_output_dir():
         return jsonify({'output': '', 'error': str(e)}), 400
 
 
+def udpdate_steps(workflow):
+    """
+    Custom logic to make workflow JSON compatible with PEACE backend
+    """
+    for step in workflow.steps:
+        if step['operation'] == 'brainreg':
+            orientation1 = step['extras'].pop('orientation-select1')
+            orientation2 = step['extras'].pop('orientation-select2')
+            orientation3 = step['extras'].pop('orientation-select3')
+            orientation = orientation1[0] + orientation2[0] + orientation3[0]
+            step['extras']['orientation'] = orientation
+            print(step['extras'])
+    return workflow
+
+
 def save_to_json(workflow):
     wf_data = {"steps": workflow.steps}
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -211,6 +226,7 @@ def create_workflow():
                 operation=step["operation"],
                 extras=step["extras"]
             )
+        workflow = udpdate_steps(workflow)
         save_to_json(workflow)
         return jsonify({"status": "ok"})
 
@@ -270,6 +286,15 @@ def render_operation_form(operation, as_fragment=True):
             {% elif field.type == 'SelectField' %}
                 {{ field.label(class="form-label") }}
                 {{ field(class="form-select", **{'data-bindable': 'false'}) }}
+            {% elif field.type == 'FormField' %}
+                <label class="form-label">{{ field.label.text }}</label>
+                <div class="d-flex gap-3">
+                    {% for subfield in field %}
+                        <div class="flex-fill">
+                            {{ subfield(class="form-select", **{'data-bindable': 'false'}) }}
+                        </div>
+                    {% endfor %}
+                </div>
             {% else %}
                 {{ field.label(class="form-label") }}
                 {{ field(class="form-control", **{'data-bindable': 'true'}) }}
