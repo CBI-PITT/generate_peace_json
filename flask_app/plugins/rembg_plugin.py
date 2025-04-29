@@ -1,11 +1,11 @@
-from wtforms import StringField, SubmitField, Form
+from wtforms import HiddenField, StringField, SubmitField, Form
 from wtforms.validators import DataRequired
 from operations import BaseOperation
 from forms import BaseForm
 
 
 class RembgForm(BaseForm):
-    operation = StringField('Operation', validators=[DataRequired()], default='rembg', render_kw={"disabled": True})
+    operation = HiddenField('Operation', validators=[DataRequired()], default='rembg')
     # channel = StringField('Channel (number, starting with 0)', default='0')
     # resolution_level = StringField('Resolution level (number, starting with 0)', default='0')
 
@@ -17,6 +17,9 @@ class RembgPlugin(BaseOperation):
 
     def get_form(self):
         return RembgForm
+
+    def get_template(self):
+        return "form_autofill_output.html"
 
     # def process_data(self, form):
     #     # Example processing logic for filter operation
