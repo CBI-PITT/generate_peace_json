@@ -203,6 +203,17 @@ def udpdate_steps(workflow):
             orientation = orientation1[0] + orientation2[0] + orientation3[0]
             step['extras']['orientation'] = orientation
             print(step['extras'])
+        elif step['operation'] == 'combine_with_metadata':
+            metadata = []
+            metadata_keys = sorted([x for x in step['extras'].keys() if x.startswith("metadata")])
+            metadata_keys_len = len(metadata_keys)
+            for key_ind in range(0, metadata_keys_len, 2):
+                metadata_dict = {}
+                metadata_dict["key"] = step['extras'].pop(metadata_keys[key_ind])
+                metadata_dict["value"] = step['extras'].pop(metadata_keys[key_ind + 1])
+                metadata.append(metadata_dict)
+            step['extras']['metadata'] = metadata
+            print(step['extras'])
     return workflow
 
 
