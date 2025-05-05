@@ -196,7 +196,7 @@ def udpdate_steps(workflow):
     Custom logic to make workflow JSON compatible with PEACE backend
     """
     for step in workflow.steps:
-        if step['operation'] == 'brainreg':
+        if step['operation'] in ['brainreg', 'ants']:
             orientation1 = step['extras'].pop('orientation-select1')
             orientation2 = step['extras'].pop('orientation-select2')
             orientation3 = step['extras'].pop('orientation-select3')

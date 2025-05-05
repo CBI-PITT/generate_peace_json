@@ -1,5 +1,21 @@
+from wtforms import Form, StringField, FieldList, FormField, HiddenField, RadioField, IntegerField, SelectField
+
 from .base import BaseOperation
-from forms import AntsForm
+from forms import BaseForm
+from utils.registration import get_names_from_url, TripleSelectSubForm
+
+
+names = get_names_from_url()
+
+
+class AntsForm(BaseForm):
+    operation = HiddenField('Operation', default='ants')
+    atlas = SelectField(
+        'Atlas',
+        choices=[(x, x) for x in names],
+        default='allen_mouse_25um'
+    )
+    orientation = FormField(TripleSelectSubForm, label='Orientation (Origin)')
 
 
 class Ants(BaseOperation):
@@ -9,6 +25,17 @@ class Ants(BaseOperation):
 
     def get_form(self):
         return AntsForm
+
+    def get_template(self):
+        return "form_autofill_output.html"
+
+    def _update_fields(self, data):
+        new_data = {}
+        for k, v in data.items():
+            if k == "orientation":
+                v = v["select1"][0] + v["select2"][0] + v["select3"][0]
+            new_data[k] = v
+        return new_data
 
     # def process_data(self, form):
     #     # Example processing logic for filter operation

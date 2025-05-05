@@ -1,5 +1,5 @@
 from flask_wtf import FlaskForm
-from wtforms import Form, StringField, FieldList, FormField, BooleanField, HiddenField, RadioField, IntegerField, SelectField
+from wtforms import Form, StringField, FieldList, FloatField, FormField, BooleanField, HiddenField, RadioField, IntegerField, SelectField
 from wtforms.validators import DataRequired
 
 
@@ -29,14 +29,16 @@ class CellFinderForm(BaseForm):
     operation = HiddenField('Operation', validators=[DataRequired()], default='cellfinder')
 
 
-class AntsForm(BaseForm):
-    operation = HiddenField('Operation', validators=[DataRequired()], default='ants')
-    atlas = StringField('Atlas (atlas name from Brainglobe Atlas API)', default='allen_mouse_25um')
-    orientation = StringField('Orientation (three-letter string)', default='sal')
+# class AntsForm(BaseForm):
+#     operation = HiddenField('Operation', validators=[DataRequired()], default='ants')
+#     atlas = StringField('Atlas (atlas name from Brainglobe Atlas API)', default='allen_mouse_25um')
+#     orientation = StringField('Orientation (three-letter string)', default='sal')
 
 
 class ContrastStretchForm(BaseForm):
     operation = HiddenField('Operation', validators=[DataRequired()], default='stretch_contrast')
+    percentile_low = FloatField('Lower Percentile', default='1.0')
+    percentile_high = FloatField('Higher Percentile', default='99.0')
 
 
 class IlastikForm(BaseForm):
@@ -45,6 +47,8 @@ class IlastikForm(BaseForm):
 
 
 class DBSCANForm(BaseForm):
+    input = HiddenField()
+    output = HiddenField()
     operation = HiddenField('Operation', validators=[DataRequired()], default='dbscan')
     cell_candidates_path = StringField('Detected cells path', validators=[DataRequired()])
     epsilon = IntegerField('Maximum Distance in Cluster', validators=[DataRequired()], default=3)
@@ -57,6 +61,8 @@ class CellposeForm(BaseForm):
 
 
 class ResNetClassificationForm(BaseForm):
+    input = HiddenField()
+    output = HiddenField()
     operation = HiddenField('Operation', validators=[DataRequired()], default='resnet_classification')
     cell_candidates_path = StringField('Detected cells path', validators=[DataRequired()])
     model_path = StringField('Model path', validators=[DataRequired()])

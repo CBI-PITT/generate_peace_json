@@ -1,45 +1,11 @@
-import requests
-
 from wtforms import Form, StringField, FieldList, FormField, HiddenField, RadioField, IntegerField, SelectField
 
 from .base import BaseOperation
 from forms import BaseForm
+from utils.registration import get_names_from_url, TripleSelectSubForm
 
 
-def get_names_from_url(url):
-    try:
-        response = requests.get(url, timeout=2)
-        response.raise_for_status()  # Raise error for bad status codes
-        lines = response.text.splitlines()
-        names = []
-
-        for line in lines[1:]:  # Skip the first line
-            if '=' in line:
-                name = line.split('=', 1)[0].strip()
-                names.append(name)
-        return names
-
-    except (requests.Timeout, requests.RequestException):
-        # Return empty list on timeout or any other request failure
-        return ['allen_mouse_25um']
-
-url = "https://gin.g-node.org/brainglobe/atlases/raw/master/last_versions.conf"
-names = get_names_from_url(url)
-
-ORIENTATION_CHOICES = [
-    ('anterior', 'anterior'),
-    ('posterior', 'posterior'),
-    ('inferior', 'inferior'),
-    ('superior', 'superior'),
-    ('left', 'left'),
-    ('right', 'right')
-]
-
-
-class TripleSelectSubForm(Form):
-    select1 = SelectField(choices=ORIENTATION_CHOICES, default='superior')
-    select2 = SelectField(choices=ORIENTATION_CHOICES, default='anterior')
-    select3 = SelectField(choices=ORIENTATION_CHOICES, default='left')
+names = get_names_from_url()
 
 
 class BrainRegForm(BaseForm):
@@ -50,7 +16,6 @@ class BrainRegForm(BaseForm):
         default='allen_mouse_25um'
     )
     orientation = FormField(TripleSelectSubForm, label='Orientation (Origin)')
-    # orientation = StringField('Orientation (three-letter string)', default='sal')
     brain_geometry = SelectField(
         'Brain Geometry',
         choices=[('full', 'full'), ('hemisphere_l', 'hemisphere_l'), ('hemisphere_r', 'hemisphere_r')],
