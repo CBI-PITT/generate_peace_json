@@ -44,6 +44,7 @@ class ContrastStretchForm(BaseForm):
 class IlastikForm(BaseForm):
     operation = HiddenField('Operation', validators=[DataRequired()], default='ilastik')
     model_path = StringField('Model path', validators=[DataRequired()])
+    binarize_threshold = FloatField("Threshold for binarization", default=0.5)
 
 
 class DBSCANForm(BaseForm):
