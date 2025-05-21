@@ -9,3 +9,6 @@ class Unet3D(BaseOperation):
 
     def get_form(self):
         return Unet3DForm
+
+    def get_template(self):
+        return "form_autofill_output.html"
