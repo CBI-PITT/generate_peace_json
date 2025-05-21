@@ -12,6 +12,7 @@ from workflows import BaseWorkflow
 
 # from flask_file_browser import extended_app
 from flask_file_browser import routes
+from auth import setup_auth, user_info
 from config import JSON_FOLDER
 
 
@@ -24,6 +25,8 @@ app.template_folder = 'templates'
 # Register the browser app blueprint
 # app.register_blueprint(extended_app, url_prefix='/browser')
 app = routes.init_blueprint(app, prefix="/browser")
+
+app, login_manager = setup_auth(app)
 
 
 # Discover and load plugins
@@ -95,7 +98,7 @@ def get_op_categories(ops):
 
 @app.route('/')
 def index():
-    return render_template('index.html', operations=[])
+    return render_template('index.html', operations=[], user=user_info())
 
 
 @app.route('/categories')
@@ -103,7 +106,7 @@ def categories():
     operations = list(OPERATIONS.keys())
     operations.extend(PLUGINS.keys())
     categories = list(set(get_op_categories(operations)))
-    return render_template('categories.html', categories=categories)
+    return render_template('categories.html', categories=categories, user=user_info())
 
 
 @app.route('/analyze/<category>')
@@ -114,14 +117,14 @@ def analyze(category):
     operations.update(PLUGINS.copy())
     operations = [x for x in operations.keys() if operations[x].category == category]
     descriptions = get_op_descriptions(operations)
-    return render_template('operations.html', operations=operations, descriptions=descriptions)
+    return render_template('operations.html', operations=operations, descriptions=descriptions, user=user_info())
 
 
 @app.route('/read')
 def read():
     operations = list(READER_PLUGINS.keys())
     descriptions = get_op_descriptions(operations)
-    return render_template('operations.html', operations=operations, descriptions=descriptions)
+    return render_template('operations.html', operations=operations, descriptions=descriptions, user=user_info())
 
 
 @app.route('/operation/<operation>', methods=['GET', 'POST'])
@@ -150,7 +153,7 @@ def operation_form(operation):
             # Redirect to the home page
             return redirect(url_for('index'))
 
-    return render_template(template, form=form, operation=operation)
+    return render_template(template, form=form, operation=operation, user=user_info())
 
 
 @app.route('/queue')
@@ -175,7 +178,7 @@ def slurm_queue():
             })
     except:
         print("ERROR: Couldn't get job list")
-    return render_template('queue.html', queue=jobs)
+    return render_template('queue.html', queue=jobs, user=user_info())
 
 
 @app.route('/get_output_dir', methods=['POST'])
@@ -253,7 +256,7 @@ def create_workflow():
     for category in categories:
         category_ops = [x for x in all_operations.keys() if all_operations[x].category == category]
         available_ops[category] = category_ops
-    return render_template("create_workflow.html", available_operations=available_ops)
+    return render_template("create_workflow.html", available_operations=available_ops, user=user_info())
 
 
 def render_operation_form(operation, as_fragment=True):
