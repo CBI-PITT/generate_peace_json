@@ -1,0 +1,11 @@
+class BaseWorkflow:
+    def __init__(self):
+        self.steps = []
+
+    def add_step(self, input, output, operation, extras):
+        self.steps.append({
+            "input_bindings": input,
+            "output_name": output,
+            "operation": operation,
+            "extras": extras,
+        })

@@ -1,14 +1,18 @@
 import json
 import importlib
 import os
+from datetime import datetime
 
 from flask import Flask, render_template, request, jsonify, redirect, url_for
 from flask import flash
+from flask import render_template_string
 
 from operations import BaseOperation, BaseReader
+from workflows import BaseWorkflow
 
 # from flask_file_browser import extended_app
 from flask_file_browser import routes
+from config import JSON_FOLDER
 
 
 app = Flask(__name__)
@@ -176,8 +180,6 @@ def slurm_queue():
 
 @app.route('/get_output_dir', methods=['POST'])
 def get_output_dir():
-    print("Inside the view")
-    print("request.json", request.json)
     input_dir = request.json.get('input')
     dataset_info_path = os.path.join(input_dir, '.dataset_info.json')
 
@@ -187,6 +189,103 @@ def get_output_dir():
             return jsonify({'output': data.get('base_output_dir', '')})
     except Exception as e:
         return jsonify({'output': '', 'error': str(e)}), 400
+
+
+def udpdate_steps(workflow):
+    """
+    Custom logic to make workflow JSON compatible with PEACE backend
+    """
+    for step in workflow.steps:
+        if step['operation'] in ['brainreg', 'ants']:
+            orientation1 = step['extras'].pop('orientation-select1')
+            orientation2 = step['extras'].pop('orientation-select2')
+            orientation3 = step['extras'].pop('orientation-select3')
+            orientation = orientation1[0] + orientation2[0] + orientation3[0]
+            step['extras']['orientation'] = orientation
+            print(step['extras'])
+        elif step['operation'] == 'combine_with_metadata':
+            metadata = []
+            metadata_keys = sorted([x for x in step['extras'].keys() if x.startswith("metadata")])
+            metadata_keys_len = len(metadata_keys)
+            for key_ind in range(0, metadata_keys_len, 2):
+                metadata_dict = {}
+                metadata_dict["key"] = step['extras'].pop(metadata_keys[key_ind])
+                metadata_dict["value"] = step['extras'].pop(metadata_keys[key_ind + 1])
+                metadata.append(metadata_dict)
+            step['extras']['metadata'] = metadata
+            print(step['extras'])
+    return workflow
+
+
+def save_to_json(workflow):
+    wf_data = {"steps": workflow.steps}
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    fname = f"SLURM_workflow_{timestamp}.json"
+    json_file_path = os.path.join(JSON_FOLDER, fname)
+    with open(json_file_path, "w") as f:
+        json.dump(wf_data, f, indent=2)
+    os.chmod(json_file_path, 0o664)
+
+
+@app.route("/workflow/new", methods=["GET", "POST"])
+def create_workflow():
+    if request.method == "POST":
+        data = request.get_json()
+        workflow = BaseWorkflow()
+        for step in data["steps"]:
+            workflow.add_step(
+                input=step["input"],
+                output=step["output"],
+                operation=step["operation"],
+                extras=step["extras"]
+            )
+        workflow = udpdate_steps(workflow)
+        save_to_json(workflow)
+        return jsonify({"status": "ok"})
+
+    # Provide available operations to dropdown
+    all_operations = {}
+    all_operations.update(OPERATIONS)
+    all_operations.update(PLUGINS)
+    categories = get_op_categories(all_operations.keys())
+    available_ops = {}
+    available_ops['readers'] = READER_PLUGINS.keys()
+    for category in categories:
+        category_ops = [x for x in all_operations.keys() if all_operations[x].category == category]
+        available_ops[category] = category_ops
+    return render_template("create_workflow.html", available_operations=available_ops)
+
+
+def render_operation_form(operation, as_fragment=True):
+    # Dynamically get the form class and instantiate it
+    if operation in OPERATIONS:
+        # load default operations
+        plugin = OPERATIONS.get(operation)
+    elif operation in PLUGINS:
+        # load plugins
+        plugin = PLUGINS.get(operation)
+    elif operation in READER_PLUGINS:
+        # load reader plugins
+        plugin = READER_PLUGINS.get(operation)
+    else:
+        return f"Operation '{operation}' not supported", 404
+    form_class = plugin.get_form()
+    form = form_class()
+
+    if not as_fragment:
+        return render_template("form.html", form=form)
+
+    if operation in READER_PLUGINS:
+        return render_template('form_fragment.html', form=form)
+    else:
+        return render_template('form_fragment_no_output.html', form=form)
+
+
+@app.route("/workflow/operation_form", methods=["POST"])
+def get_operation_form():
+    operation = request.form["operation"]
+    form_html = render_operation_form(operation, as_fragment=True)
+    return jsonify({"form_html": form_html})
 
 
 if __name__ == '__main__':
