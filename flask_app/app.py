@@ -6,6 +6,7 @@ from datetime import datetime
 from flask import Flask, render_template, request, jsonify, redirect, url_for
 from flask import flash
 from flask import render_template_string
+from flask_login import login_required
 
 from operations import BaseOperation, BaseReader
 from workflows import BaseWorkflow
@@ -98,7 +99,7 @@ def get_op_categories(ops):
 
 @app.route('/')
 def index():
-    return render_template('index.html', operations=[], user=user_info())
+    return render_template('index.html', operations=[])
 
 
 @app.route('/categories')
@@ -106,7 +107,7 @@ def categories():
     operations = list(OPERATIONS.keys())
     operations.extend(PLUGINS.keys())
     categories = list(set(get_op_categories(operations)))
-    return render_template('categories.html', categories=categories, user=user_info())
+    return render_template('categories.html', categories=categories)
 
 
 @app.route('/analyze/<category>')
@@ -117,17 +118,18 @@ def analyze(category):
     operations.update(PLUGINS.copy())
     operations = [x for x in operations.keys() if operations[x].category == category]
     descriptions = get_op_descriptions(operations)
-    return render_template('operations.html', operations=operations, descriptions=descriptions, user=user_info())
+    return render_template('operations.html', operations=operations, descriptions=descriptions)
 
 
 @app.route('/read')
 def read():
     operations = list(READER_PLUGINS.keys())
     descriptions = get_op_descriptions(operations)
-    return render_template('operations.html', operations=operations, descriptions=descriptions, user=user_info())
+    return render_template('operations.html', operations=operations, descriptions=descriptions)
 
 
 @app.route('/operation/<operation>', methods=['GET', 'POST'])
+@login_required
 def operation_form(operation):
     if operation in OPERATIONS:
         # load default operations
@@ -153,7 +155,7 @@ def operation_form(operation):
             # Redirect to the home page
             return redirect(url_for('index'))
 
-    return render_template(template, form=form, operation=operation, user=user_info())
+    return render_template(template, form=form, operation=operation)
 
 
 @app.route('/queue')
@@ -178,7 +180,7 @@ def slurm_queue():
             })
     except:
         print("ERROR: Couldn't get job list")
-    return render_template('queue.html', queue=jobs, user=user_info())
+    return render_template('queue.html', queue=jobs)
 
 
 @app.route('/get_output_dir', methods=['POST'])
@@ -231,6 +233,7 @@ def save_to_json(workflow):
 
 
 @app.route("/workflow/new", methods=["GET", "POST"])
+@login_required
 def create_workflow():
     if request.method == "POST":
         data = request.get_json()
@@ -256,7 +259,7 @@ def create_workflow():
     for category in categories:
         category_ops = [x for x in all_operations.keys() if all_operations[x].category == category]
         available_ops[category] = category_ops
-    return render_template("create_workflow.html", available_operations=available_ops, user=user_info())
+    return render_template("create_workflow.html", available_operations=available_ops)
 
 
 def render_operation_form(operation, as_fragment=True):

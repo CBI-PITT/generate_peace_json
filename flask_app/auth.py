@@ -117,7 +117,7 @@ def setup_auth(app):
         # if the above check passes, then we know the user has the right credentials
         login_user(load_user(username), remember=remember)
         print('Got to here')
-        return redirect(url_for('profile'))
+        return redirect(url_for('index'))
 
     # @app.route('/signup')
     # def signup():
