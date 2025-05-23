@@ -34,7 +34,7 @@
                     <td>{{ job["Time"] }}</td>
                     <td>{{ job["Nodes"] }}</td>
                     <td>
-                      {% if job["Job Name"].startswith(current_user.get_id()) or current_user.get_id() == "CBI_Admin" %}
+                      {% if current_user.get_id() and (job["Job Name"].startswith(current_user.get_id()) or current_user.get_id() == "CBI_Admin") %}
                       <button class="btn btn-sm btn-danger cancel-job" title="Cancel Job">
                         🗑️
                       </button>
