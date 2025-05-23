@@ -294,5 +294,22 @@ def get_operation_form():
     return jsonify({"form_html": form_html})
 
 
+@app.route("/cancel", methods=["POST"])
+def cancel_job():
+    data = request.get_json()
+    job_id = data.get("job_id")
+
+    if not job_id:
+        return jsonify({"message": "Missing job ID"}), 400
+
+    try:
+        result = subprocess.run(["scancel", str(job_id)], capture_output=True, text=True)
+        if result.returncode != 0:
+            return jsonify({"message": f"Failed to cancel job: {result.stderr}"}), 500
+        return jsonify({"message": f"Job {job_id} cancelled successfully."})
+    except Exception as e:
+        return jsonify({"message": str(e)}), 500
+
+
 if __name__ == '__main__':
-    app.run(host="0.0.0.0", port=1313, debug=True)
+    app.run(host="0.0.0.0", port=1717, debug=True)
