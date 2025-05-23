@@ -25,7 +25,7 @@
             </thead>
             <tbody>
                 {% for job in queue %}
-                <tr>
+                <tr data-job-id="{{ job['Job ID'] }}">
                     <td>{{ job["Job ID"] }}</td>
                     <td>{{ job["User"] }}</td>
                     <td>{{ job["Job Name"] }}</td>
