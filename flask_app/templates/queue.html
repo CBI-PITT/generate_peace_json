@@ -65,14 +65,6 @@
   </script>
 <script>
   $(document).ready(function () {
-    $('#slurm-table').DataTable({
-      paging: false,
-      searching: true,
-      info: true,
-      order: [[0, 'asc']],
-      dom: '<"top"f i>rt'
-    });
-
     // Handle job cancel click
     $('#slurm-table').on('click', '.cancel-job', function () {
       const row = $(this).closest('tr');
