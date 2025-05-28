@@ -101,3 +101,19 @@ class CombineWithMetadataForm(BaseForm):
     operation = HiddenField('Operation', validators=[DataRequired()], default='combine_with_metadata')
     cells_path = StringField('Cells CSV path', validators=[DataRequired()])
     metadata = FieldList(FormField(MetaFieldForm), min_entries=1)
+
+
+class DenoiseCellposeForm(BaseForm):
+    operation = HiddenField('Operation', validators=[DataRequired()], default='denoise_cellpose')
+    model = SelectField('Model name',
+        choices=[
+            ('denoise_cyto3', 'denoise_cyto3'),
+            ('deblur_cyto3', 'deblur_cyto3'),
+            ('denoise_cyto2', 'denoise_cyto2'),
+            ('deblur_cyto2', 'deblur_cyto2'),
+            ('denoise_nuclei', 'denoise_nuclei'),
+            ('deblur_nuclei', 'deblur_nuclei')
+        ],
+        default='denoise_cyto3'
+    )
+    diameter = IntegerField('Diameter', default=100)
