@@ -7,7 +7,7 @@ from datetime import datetime
 from flask import Flask, render_template, request, jsonify, redirect, url_for
 from flask import flash
 from flask import render_template_string
-from flask_login import login_required
+from flask_login import login_required, current_user
 
 from operations import BaseOperation, BaseReader
 from workflows import BaseWorkflow
@@ -16,6 +16,7 @@ from workflows import BaseWorkflow
 from flask_file_browser import routes
 from auth import setup_auth, user_info
 from config import JSON_FOLDER
+from utils.users import get_user
 
 
 app = Flask(__name__)
@@ -201,7 +202,17 @@ def udpdate_steps(workflow):
     """
     Custom logic to make workflow JSON compatible with PEACE backend
     """
+    user = current_user.get_id()
+    if user == "CBI_Admin" or not user:
+        all_inputs = [x['extras'].get('input', "") for x in workflow.steps]
+        all_inputs = [get_user(x) for x in all_inputs if x != ""]
+        all_inputs = [x for x in all_inputs if x != ""]
+        if len(all_inputs) >= 1:
+            user = all_inputs[0]
+
     for step in workflow.steps:
+        if user:
+            step['extras']['user'] = user
         if step['operation'] in ['brainreg', 'ants']:
             orientation1 = step['extras'].pop('orientation-select1')
             orientation2 = step['extras'].pop('orientation-select2')
@@ -313,4 +324,4 @@ def cancel_job():
 
 
 if __name__ == '__main__':
-    app.run(host="0.0.0.0", port=1717, debug=True)
+    app.run(host="0.0.0.0", port=1313, debug=True)

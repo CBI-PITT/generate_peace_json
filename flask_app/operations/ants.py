@@ -5,10 +5,8 @@ from forms import BaseForm
 from utils.registration import get_names_from_url, TripleSelectSubForm
 
 
-names = get_names_from_url()
-
-
 class AntsForm(BaseForm):
+    names = get_names_from_url()
     operation = HiddenField('Operation', default='ants')
     atlas = SelectField(
         'Atlas',
