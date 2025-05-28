@@ -35,9 +35,9 @@
                     <td>{{ job["Nodes"] }}</td>
                     <td>
                       {% if current_user.get_id() and (job["Job Name"].startswith(current_user.get_id()) or current_user.get_id() == "CBI_Admin") %}
-                      <button class="btn btn-sm btn-danger cancel-job" title="Cancel Job">
-                        🗑️
-                      </button>
+                          <button class="btn p-0 border-0 cancel-job" title="Cancel Job">
+                            <i class="fas fa-trash text-secondary"></i>
+                          </button>
                       {% endif %}
                     </td>
                 </tr>
@@ -77,7 +77,7 @@
           contentType: "application/json",
           data: JSON.stringify({ job_id: jobId }),
           success: function (response) {
-            alert(response.message);
+            // alert(response.message);
             row.fadeOut(300, () => row.remove());
           },
           error: function (xhr) {
