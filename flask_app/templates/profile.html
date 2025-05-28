@@ -1,0 +1,16 @@
+{% with messages = get_flashed_messages() %}
+{% if messages %}
+    <div class="notification is-danger">
+        {{ messages[0] }}.</a>.
+    </div>
+{% endif %}
+{% endwith %}
+<!-- <form method="GET" action="/profile"> -->
+
+{% extends "flask_file_browser/ffbbase.html" %}
+
+{% block ffbcontent %}
+<h1 class="title">
+  Welcome, {{ user.id }}!
+</h1>
+{% endblock %}

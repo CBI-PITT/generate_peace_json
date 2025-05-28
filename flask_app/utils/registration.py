@@ -1,13 +1,15 @@
 import requests
+from functools import lru_cache
 
 from wtforms import Form, SelectField
 
 
+@lru_cache(maxsize=None)
 def get_names_from_url():
     url = "https://gin.g-node.org/brainglobe/atlases/raw/master/last_versions.conf"
 
     try:
-        response = requests.get(url, timeout=2)
+        response = requests.get(url, timeout=5)
         response.raise_for_status()  # Raise error for bad status codes
         lines = response.text.splitlines()
         names = []
