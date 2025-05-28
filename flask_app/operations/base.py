@@ -3,6 +3,7 @@ import os
 from datetime import datetime
 
 from config import JSON_FOLDER
+from utils.users import get_user
 
 
 class BaseOperation:
@@ -28,8 +29,8 @@ class BaseOperation:
             "extras": {}
         }
         data = {field.name: field.data for field in form if field.name not in ["submit", "csrf_token", "input", "output", "operation"]}
-        if form.input.data.startswith("/h20/Public/"):
-            user = form.input.data.replace('/h20/Public/', '').split('/')[0]
+        user = get_user(form.input.data)
+        if user != "":
             data['user'] = user
 
         data = self._update_fields(data)
@@ -73,8 +74,8 @@ class BaseReader:
             "extras": {}
         }
         data = {field.name: field.data for field in form if field.name not in ["submit", "csrf_token", "input", "output", "operation"]}
-        if form.input.data.startswith("/h20/Public/"):
-            user = form.input.data.replace('/h20/Public/', '').split('/')[0]
+        user = get_user(form.input.data)
+        if user != "":
             data['user'] = user
         json_data["extras"] = data
         # Save the JSON data to a file
