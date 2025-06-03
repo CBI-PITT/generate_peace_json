@@ -1,18 +1,22 @@
 import json
 import importlib
 import os
+import subprocess
 from datetime import datetime
 
 from flask import Flask, render_template, request, jsonify, redirect, url_for
 from flask import flash
 from flask import render_template_string
+from flask_login import login_required, current_user
 
 from operations import BaseOperation, BaseReader
 from workflows import BaseWorkflow
 
 # from flask_file_browser import extended_app
 from flask_file_browser import routes
+from auth import setup_auth, user_info
 from config import JSON_FOLDER
+from utils.users import get_user
 
 
 app = Flask(__name__)
@@ -24,6 +28,8 @@ app.template_folder = 'templates'
 # Register the browser app blueprint
 # app.register_blueprint(extended_app, url_prefix='/browser')
 app = routes.init_blueprint(app, prefix="/browser")
+
+app, login_manager = setup_auth(app)
 
 
 # Discover and load plugins
@@ -125,6 +131,7 @@ def read():
 
 
 @app.route('/operation/<operation>', methods=['GET', 'POST'])
+@login_required
 def operation_form(operation):
     if operation in OPERATIONS:
         # load default operations
@@ -195,7 +202,17 @@ def udpdate_steps(workflow):
     """
     Custom logic to make workflow JSON compatible with PEACE backend
     """
+    user = current_user.get_id()
+    if user == "CBI_Admin" or not user:
+        all_inputs = [x['extras'].get('input', "") for x in workflow.steps]
+        all_inputs = [get_user(x) for x in all_inputs if x != ""]
+        all_inputs = [x for x in all_inputs if x != ""]
+        if len(all_inputs) >= 1:
+            user = all_inputs[0]
+
     for step in workflow.steps:
+        if user:
+            step['extras']['user'] = user
         if step['operation'] in ['brainreg', 'ants']:
             orientation1 = step['extras'].pop('orientation-select1')
             orientation2 = step['extras'].pop('orientation-select2')
@@ -228,6 +245,7 @@ def save_to_json(workflow):
 
 
 @app.route("/workflow/new", methods=["GET", "POST"])
+@login_required
 def create_workflow():
     if request.method == "POST":
         data = request.get_json()
@@ -286,6 +304,23 @@ def get_operation_form():
     operation = request.form["operation"]
     form_html = render_operation_form(operation, as_fragment=True)
     return jsonify({"form_html": form_html})
+
+
+@app.route("/cancel", methods=["POST"])
+def cancel_job():
+    data = request.get_json()
+    job_id = data.get("job_id")
+
+    if not job_id:
+        return jsonify({"message": "Missing job ID"}), 400
+
+    try:
+        result = subprocess.run(["scancel", str(job_id)], capture_output=True, text=True)
+        if result.returncode != 0:
+            return jsonify({"message": f"Failed to cancel job: {result.stderr}"}), 500
+        return jsonify({"message": f"Job {job_id} cancelled successfully."})
+    except Exception as e:
+        return jsonify({"message": str(e)}), 500
 
 
 if __name__ == '__main__':

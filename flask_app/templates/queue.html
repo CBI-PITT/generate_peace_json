@@ -20,11 +20,12 @@
                     <th>State</th>
                     <th>Time</th>
                     <th>Priority</th>
+                    <th>Action</th>
                 </tr>
             </thead>
             <tbody>
                 {% for job in queue %}
-                <tr>
+                <tr data-job-id="{{ job['Job ID'] }}">
                     <td>{{ job["Job ID"] }}</td>
                     <td>{{ job["User"] }}</td>
                     <td>{{ job["Job Name"] }}</td>
@@ -32,6 +33,13 @@
                     <td>{{ job["State"] }}</td>
                     <td>{{ job["Time"] }}</td>
                     <td>{{ job["Nodes"] }}</td>
+                    <td>
+                      {% if current_user.get_id() and (job["Job Name"].startswith(current_user.get_id()) or current_user.get_id() == "CBI_Admin") %}
+                          <button class="btn p-0 border-0 cancel-job" title="Cancel Job">
+                            <i class="fas fa-trash text-secondary"></i>
+                          </button>
+                      {% endif %}
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -55,4 +63,30 @@
       });
     });
   </script>
+<script>
+  $(document).ready(function () {
+    // Handle job cancel click
+    $('#slurm-table').on('click', '.cancel-job', function () {
+      const row = $(this).closest('tr');
+      const jobId = row.data('job-id');
+
+      if (confirm(`Are you sure you want to cancel job ${jobId}?`)) {
+        $.ajax({
+          url: "/cancel",
+          method: "POST",
+          contentType: "application/json",
+          data: JSON.stringify({ job_id: jobId }),
+          success: function (response) {
+            // alert(response.message);
+            row.fadeOut(300, () => row.remove());
+          },
+          error: function (xhr) {
+            alert(`Error canceling job: ${xhr.responseText}`);
+          }
+        });
+      }
+    });
+  });
+</script>
+
 {% endblock %}
