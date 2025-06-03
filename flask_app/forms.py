@@ -117,3 +117,9 @@ class DenoiseCellposeForm(BaseForm):
         default='denoise_cyto3'
     )
     diameter = IntegerField('Diameter', default=100)
+
+
+class RemoveStripesFFTForm(BaseForm):
+    operation = HiddenField('Operation', validators=[DataRequired()], default='remove_stripes_fft')
+    stripe_direction = SelectField("Stripes orientation", choices=[('v', 'vertical'), ('h', 'horizontal')], default='v')
+    composites_dir = StringField("Composites directory (RSCM only)")
