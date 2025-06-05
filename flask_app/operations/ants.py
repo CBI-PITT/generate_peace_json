@@ -2,11 +2,11 @@ from wtforms import Form, StringField, FieldList, FormField, HiddenField, RadioF
 
 from .base import BaseOperation
 from forms import BaseForm
-from utils.registration import get_names_from_url, TripleSelectSubForm
+from utils.registration import bg_atlas_names, TripleSelectSubForm
 
 
 class AntsForm(BaseForm):
-    names = get_names_from_url()
+    names = bg_atlas_names.atlas_names
     operation = HiddenField('Operation', default='ants')
     atlas = SelectField(
         'Atlas',
