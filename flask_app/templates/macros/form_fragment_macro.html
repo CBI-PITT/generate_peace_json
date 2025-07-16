@@ -37,8 +37,29 @@
         {% elif field.type == 'FieldList' %}
             <div></div>
         {% else %}
-            {{ field.label(class="form-label") }}
-            {{ field(class="form-control", **{'data-bindable': 'true'}) }}
+            {% if field.type in ['StringField', 'TextAreaField'] %}
+                <div class="row">
+                    <div class="col-12">
+                        {{ field.label(class="form-label") }}
+                    </div>
+                    <div class="col-12 d-flex align-items-start gap-2">
+                        <div class="flex-grow-1">
+                            {{ field(class="form-control", id=field.id, **{'data-bindable': 'true'}) }}
+                        </div>
+                        <div>
+                            <button type="button" class="btn btn-outline-secondary browse-btn" data-target="{{ field.id }}">
+                                Browse <span class="arrow">▼</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="file-browser-container mt-2" id="browser-{{ field.id }}" style="display: none; border: 1px solid #ccc; padding: 10px;">
+                    <iframe src="/browser/dir/?fieldId={{ field.id }}" width="100%" height="300px" frameborder="0"></iframe>
+                </div>
+            {% else %}
+                {{ field.label(class="form-label") }}
+                {{ field(class="form-control", id=field.id, **{'data-bindable': 'true'}) }}
+            {% endif %}
         {% endif %}
         </div>
     {% endif %}

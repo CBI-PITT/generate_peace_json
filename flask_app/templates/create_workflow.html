@@ -75,6 +75,7 @@ $("#load-operation").on("click", function () {
         $("#form-container").html(`<div class="card"><div class="card-body">${data.form_html}</div></div>`);
         $("#operation-controls").show();
         addOutputBindings();  // <-- insert dropdowns for binding previous outputs
+        setupBrowseButtons();  // <-- setup "Browse" buttons & iframe toggle
     });
 });
 
@@ -198,6 +199,36 @@ function addOutputBindings() {
 
         fieldEl.after(bindingSelector);
         fieldEl.after(wrapper);
+    });
+}
+
+function setupBrowseButtons() {
+    console.log("setupBrowseButtons");
+    $("#form-container").off("click", ".browse-btn");
+    $("#form-container").on("click", ".browse-btn", function () {
+        console.log("click");
+        const fieldId = $(this).data("target");
+        const browser = $("#browser-" + fieldId);
+        const arrow = $(this).find(".arrow");
+
+        const isVisible = browser.is(":visible");
+        browser.toggle();
+        arrow.text(isVisible ? "▼" : "▲");
+    });
+
+    // Optional: handle postMessage from iframe
+    window.addEventListener("message", function(event) {
+        const { fieldId, selectedPath } = event.data;
+        if (fieldId && selectedPath) {
+            const input = document.getElementById(fieldId);
+            const browser = document.getElementById("browser-" + fieldId);
+            const button = document.querySelector(`.browse-btn[data-target="${fieldId}"]`);
+            const arrow = button?.querySelector(".arrow");
+
+            if (input) input.value = selectedPath;
+            if (browser) browser.style.display = "none";
+            if (arrow) arrow.textContent = "▼";
+        }
     });
 }
 </script>
