@@ -12,6 +12,9 @@ from flask_login import (LoginManager,
                          login_required,
                          logout_user)
 
+from ldap3 import Server, Connection, ALL, NTLM
+from ldap3.extend.microsoft.modifyPassword import ad_modify_password
+
 
 def user_info():
     return {'is_authenticated': current_user.is_authenticated,
@@ -137,6 +140,34 @@ def setup_auth(app):
         logout_user()
         return redirect(url_for('index'))
 
+    @app.route('/reset-password', methods=['GET', 'POST'])
+    def reset_password():
+        if request.method == 'POST':
+            username = request.form['username']
+            old_password = request.form['old_password']
+            new_password = request.form['new_password']
+            confirm_password = request.form['confirm_password']
+
+            if new_password != confirm_password:
+                flash("New passwords do not match.")
+                return redirect('/reset-password')
+
+            success = change_ldap_password(
+                username=username,
+                old_password=old_password,
+                new_password=new_password,
+                domain_server=r"ldap://{}:{}".format(settings.get('auth', 'domain_server'), settings.get('auth', 'domain_port')),
+                domain_name=settings.get('auth', 'domain_name')
+            )
+
+            if success:
+                flash("Password changed successfully.")
+            else:
+                flash("Password change failed. Check your credentials or contact support.")
+            return redirect('/reset-password')
+
+        return render_template('reset_password.html')
+
     return app, login_manager
 
 
@@ -170,3 +201,66 @@ def domain_auth(user_name, password, domain_server=r"ldap://cbilab.pitt.edu:389"
         print('An error occured while connecting to the domain server')
         return None
 
+
+def change_ldap_password(username, old_password, new_password,
+                         domain_server, domain_name,
+                         admin_user=None, admin_pass=None):
+    user_dn = f"{domain_name}\\{username}"
+    print(">>>>>>>>>>>>>> domain_server", domain_server)
+
+    server = Server(domain_server, get_info=ALL)
+
+    # Step 1: Authenticate with current password
+    user_conn = Connection(server, user=user_dn, password=old_password, authentication=NTLM)
+
+    if not user_conn.bind():
+        print("Old password incorrect")
+        return False
+    print(user_conn.extend.standard.who_am_i())
+
+    # # Step 2: Bind with admin user (needed for password change)
+    # if admin_user and admin_pass:
+    #     admin_dn = f"{domain_name}\\{admin_user}"
+    #     admin_conn = Connection(server, user=admin_dn, password=admin_pass, authentication=NTLM, auto_bind=True)
+    # else:
+    #     # Use same user connection if no admin is specified (may fail if user can't self-reset)
+    #     admin_conn = user_conn
+
+    # Step 3: Get user's full DN
+    search_base = server.info.other['defaultNamingContext'][0]
+
+    found = user_conn.search(
+        search_base=search_base,
+        search_filter=f'(sAMAccountName={username})',
+        attributes=['distinguishedName']
+    )
+    print(user_conn.entries)
+
+    if not user_conn.entries:
+        print("User not found in LDAP")
+        return False
+
+
+    user_dn_full = user_conn.entries[0].distinguishedName.value
+
+    # Step 4: Change password
+    try:
+        success = ad_modify_password(user_conn, user_dn_full, new_password, old_password)
+        if success:
+            print("Password changed successfully")
+            return True
+        else:
+            print("Password change failed")
+            print("LDAP result:", user_conn.result)
+            if 'message' in user_conn.result:
+                msg = user_conn.result['message']
+                if 'data' in msg:
+                    print("Hex error code:", msg.split('data')[-1].strip())
+            return False
+    except Exception as e:
+        print(f"Error changing password: {e}")
+        return False
+    finally:
+        user_conn.unbind()
+        # if admin_user:
+        #     admin_conn.unbind()
