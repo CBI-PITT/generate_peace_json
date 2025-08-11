@@ -49,3 +49,7 @@
 .collapse.show + .list-group-item .chevron-icon {
     transform: rotate(180deg); /* Rotate 180 degrees */
 }
+
+#myTable td, #myTable th {
+    padding: 0.5rem;
+}
