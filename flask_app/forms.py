@@ -123,3 +123,18 @@ class RemoveStripesFFTForm(BaseForm):
     operation = HiddenField('Operation', validators=[DataRequired()], default='remove_stripes_fft')
     stripe_direction = SelectField("Stripes orientation", choices=[('v', 'vertical'), ('h', 'horizontal')], default='v')
     composites_dir = StringField("Composites directory (RSCM only)")
+
+
+class SpotiflowForm(BaseForm):
+    operation = HiddenField('Operation', validators=[DataRequired()], default='spotiflow')
+    model = SelectField('Model name',
+        choices=[
+            ('general', 'general'),
+            ('hybiss', 'hybiss'),
+            ('synth_complex', 'synth_complex'),
+            ('synth_3d', 'synth_3d'),
+            ('smfish_3d', 'smfish_3d'),
+        ],
+        default='general'
+    )
+    with_dbscan = BooleanField('With DBSCAN?')
