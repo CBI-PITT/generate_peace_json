@@ -231,5 +231,21 @@ function setupBrowseButtons() {
         }
     });
 }
+window.addEventListener("message", function(event) {
+    console.log("Message!");
+    const { fieldId, selectedPath, fileName } = event.data;
+    if (fieldId && selectedPath) {
+        const input = document.getElementById(fieldId);
+        const browser = document.getElementById("browser-" + fieldId);
+        const button = document.querySelector(`.browse-btn[data-target="${fieldId}"]`);
+        const arrow = button?.querySelector(".arrow");
+        const label = document.getElementById("selected-name-" + fieldId);
+
+        if (input) input.value = selectedPath;
+        if (label && fileName) label.textContent = `Selected: ${fileName}`;
+        if (browser) browser.style.display = "none";
+        if (arrow) arrow.textContent = "▼";
+    }
+});
 </script>
 {% endblock %}
