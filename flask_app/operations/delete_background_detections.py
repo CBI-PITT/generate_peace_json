@@ -1,5 +1,6 @@
 from .base import BaseOperation
 from forms import DeleteBGDetectionsForm
+from utils.users import get_user
 
 
 class DeleteBGDetections(BaseOperation):
@@ -13,3 +14,6 @@ class DeleteBGDetections(BaseOperation):
 
     def get_form(self):
         return DeleteBGDetectionsForm
+
+    def get_username(self):
+        return get_user(self.form.cell_candidates_path.data)

@@ -22,7 +22,11 @@ class BaseOperation:
     def get_template(self):
         return 'form.html'
 
+    def get_username(self):
+        return get_user(self.form.input.data)
+
     def process_data(self, form):
+        self.form = form
         json_data = {
             "input": form.input.data,
             "output": form.output.data,
@@ -31,8 +35,8 @@ class BaseOperation:
         }
         data = {field.name: field.data for field in form if field.name not in ["submit", "csrf_token", "input", "output", "operation"]}
         user = current_user.get_id()
-        if user == "CBI_Admin" or not user:
-            user = get_user(form.input.data)
+        if user == "CBI_Admin":
+            user = self.get_username()
         if user:
             data['user'] = user
 

@@ -1,5 +1,6 @@
 from .base import BaseOperation
 from forms import TransformPointsForm
+from utils.users import get_user
 
 
 class TransformPoints(BaseOperation):
@@ -9,3 +10,6 @@ class TransformPoints(BaseOperation):
 
     def get_form(self):
         return TransformPointsForm
+
+    def get_username(self):
+        return get_user(self.form.cells_path.data)

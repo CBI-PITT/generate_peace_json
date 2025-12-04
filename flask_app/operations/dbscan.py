@@ -1,5 +1,6 @@
 from .base import BaseOperation
 from forms import DBSCANForm
+from utils.users import get_user
 
 
 class DBSCAN(BaseOperation):
@@ -9,6 +10,9 @@ class DBSCAN(BaseOperation):
 
     def get_form(self):
         return DBSCANForm
+
+    def get_username(self):
+        return get_user(self.form.cell_candidates_path.data)
 
     # def process_data(self, form):
     #     # Example processing logic for filter operation
