@@ -1,5 +1,6 @@
 from .base import BaseOperation
 from forms import ResNetClassificationForm
+from utils.fs import get_input_from_data, get_output_from_data
 from utils.users import get_user
 
 
@@ -14,19 +15,9 @@ class ResNetClassification(BaseOperation):
     def get_username(self):
         return get_user(self.form.cell_candidates_path.data)
 
-    # def process_data(self, form):
-    #     # Example processing logic for filter operation
-    #     json_data = {
-    #         "input": form.input.data,
-    #         "output": form.output.data,
-    #         "operation": self.name,
-    #         "extras": {}
-    #     }
-    #     data = {field.name: field.data for field in form if field.name not in ["submit", "csrf_token", "input", "output", "operation"]}
-    #     json_data["extras"] = data
-    #     # Save the JSON data to a file
-    #     from datetime import datetime
-    #     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    #     with open(f'/h20/CBI/Iana/json/SLURM_settings_{timestamp}.json', 'w') as f:
-    #         import json
-    #         json.dump(json_data, f)
+    def _update_fields(self, json_data):
+        if json_data["input"] == "":
+            json_data["input"] = get_input_from_data(json_data["extras"]["cell_candidates_path"])
+        if json_data["output"] == "":
+            json_data["output"] = get_output_from_data(json_data["input"])
+        return json_data
