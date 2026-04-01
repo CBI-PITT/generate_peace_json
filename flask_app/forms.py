@@ -41,6 +41,11 @@ class ContrastStretchForm(BaseForm):
     percentile_high = FloatField('Higher Percentile', default='99.0')
 
 
+class AdaptiveHistogramEqualizationForm(BaseForm):
+    operation = HiddenField('Operation', validators=[DataRequired()], default='adaptive_histogram_equalization')
+    clip_limit = FloatField('Clip Limit', default=0.03)
+
+
 class IlastikForm(BaseForm):
     operation = HiddenField('Operation', validators=[DataRequired()], default='ilastik')
     model_path = StringField('Model path', validators=[DataRequired()])
