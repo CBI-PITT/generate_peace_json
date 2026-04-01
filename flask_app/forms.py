@@ -51,6 +51,11 @@ class GaussianBlurForm(BaseForm):
     sigma = FloatField('Sigma', default=1.0)
 
 
+class GammaCorrectionForm(BaseForm):
+    operation = HiddenField('Operation', validators=[DataRequired()], default='gamma_correction')
+    gamma = FloatField('Gamma', default=1.0)
+
+
 class IlastikForm(BaseForm):
     operation = HiddenField('Operation', validators=[DataRequired()], default='ilastik')
     model_path = StringField('Model path', validators=[DataRequired()])
