@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+
+{% block title %}{{ operation.capitalize() }} Form{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2 class="card-title">{{ operation.capitalize() }} Settings</h2>
+    </div>
+    <div class="card-body">
+        <form method="post" class="needs-validation" novalidate>
+            {{ form.hidden_tag() }}
+
+            <div class="mb-3">
+                {{ form.input.label(class="form-label") }}
+                {{ form.input(type="hidden", id=form.input.id) }}
+                <div id="selected-name-{{ form.input.id }}" class="form-text text-muted fst-italic">No file selected</div>
+                <div class="mt-2">
+                    <button type="button" class="btn btn-outline-secondary browse-btn" data-target="{{ form.input.id }}">
+                        Browse <span class="arrow">v</span>
+                    </button>
+                </div>
+                <div class="file-browser-container mt-2" id="browser-{{ form.input.id }}" style="display: none; border: 1px solid #ccc; padding: 10px;">
+                    <iframe name="iframe-input-{{ form.input.id }}"
+                        src="/browser/dir/"
+                        width="100%" height="300px"
+                        frameborder="0"
+                        data-field-id="{{ form.input.id }}">
+                    </iframe>
+                </div>
+            </div>
+
+            <div class="mb-3">
+                {{ form.calculator_operation.label(class="form-label") }}
+                {{ form.calculator_operation(class="form-select") }}
+            </div>
+
+            <div class="mb-3">
+                {{ form.input2.label(class="form-label") }}
+                {{ form.input2(type="hidden", id=form.input2.id) }}
+                <div class="d-flex gap-2 align-items-start">
+                    <div class="flex-grow-1">
+                        <input type="text" class="form-control" id="{{ form.input2.id }}-display" placeholder="Folder path or numeric value">
+                    </div>
+                    <div>
+                        <button type="button" class="btn btn-outline-secondary browse-btn" data-target="{{ form.input2.id }}">
+                            Browse <span class="arrow">v</span>
+                        </button>
+                    </div>
+                </div>
+                <div id="selected-name-{{ form.input2.id }}" class="form-text text-muted fst-italic">No file selected</div>
+                <div class="file-browser-container mt-2" id="browser-{{ form.input2.id }}" style="display: none; border: 1px solid #ccc; padding: 10px;">
+                    <iframe name="iframe-input-{{ form.input2.id }}"
+                        src="/browser/dir/"
+                        width="100%" height="300px"
+                        frameborder="0"
+                        data-field-id="{{ form.input2.id }}">
+                    </iframe>
+                </div>
+            </div>
+
+            <div class="mb-3">
+                {{ form.output.label(class="form-label") }}
+                {{ form.output(type="hidden", id=form.output.id) }}
+                <div id="selected-name-{{ form.output.id }}" class="form-text text-muted fst-italic">No file selected</div>
+                <div class="mt-2">
+                    <button type="button" class="btn btn-outline-secondary browse-btn" data-target="{{ form.output.id }}">
+                        Browse <span class="arrow">v</span>
+                    </button>
+                </div>
+                <div class="file-browser-container mt-2" id="browser-{{ form.output.id }}" style="display: none; border: 1px solid #ccc; padding: 10px;">
+                    <iframe name="iframe-input-{{ form.output.id }}"
+                        src="/browser/dir/"
+                        width="100%" height="300px"
+                        frameborder="0"
+                        data-field-id="{{ form.output.id }}">
+                    </iframe>
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <div class="form-check">
+                    {{ form.save_as_float(class="form-check-input") }}
+                    {{ form.save_as_float.label(class="form-check-label") }}
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">{{ form.priority.label.text }}</label>
+                <div class="d-flex gap-3">
+                    {% for subfield in form.priority %}
+                        <div class="form-check form-check-inline">
+                            {{ subfield(class="form-check-input") }}
+                            {{ subfield.label(class="form-check-label") }}
+                        </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-success">Submit</button>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    document.querySelectorAll(".browse-btn").forEach(function (btn) {
+        btn.addEventListener("click", function () {
+            const fieldId = btn.getAttribute("data-target");
+            const browser = document.getElementById("browser-" + fieldId);
+            const arrow = btn.querySelector(".arrow");
+
+            const isVisible = browser.style.display === "block";
+            browser.style.display = isVisible ? "none" : "block";
+            arrow.textContent = isVisible ? "v" : "^";
+        });
+    });
+
+    const input2Field = document.getElementById("{{ form.input2.id }}");
+    const input2DisplayField = document.getElementById("{{ form.input2.id }}-display");
+    if (input2Field && input2DisplayField) {
+        input2DisplayField.addEventListener("input", function () {
+            input2Field.value = input2DisplayField.value;
+        });
+    }
+
+    const inputField = document.getElementById("{{ form.input.id }}");
+    if (inputField) {
+        inputField.addEventListener("input", function () {
+            const inputDir = inputField.value;
+            if (!inputDir) {
+                document.getElementById("{{ form.output.id }}").value = "";
+                document.getElementById("selected-name-{{ form.output.id }}").textContent = "No file selected";
+                return;
+            }
+
+            fetch('/get_output_dir', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ input: inputDir })
+            })
+                .then(response => response.ok ? response.json() : Promise.reject())
+                .then(response => {
+                    const outputField = document.getElementById("{{ form.output.id }}");
+                    const outputLabel = document.getElementById("selected-name-{{ form.output.id }}");
+                    outputField.value = response.output || "";
+                    outputLabel.textContent = response.output ? `Selected: ${response.output.split('/').filter(Boolean).pop()}` : "No file selected";
+                })
+                .catch(() => {
+                    document.getElementById("{{ form.output.id }}").value = "";
+                    document.getElementById("selected-name-{{ form.output.id }}").textContent = "No file selected";
+                });
+        });
+    }
+});
+
+window.addEventListener("message", function(event) {
+    const { fieldId, selectedPath, fileName } = event.data;
+    if (fieldId && selectedPath) {
+        const input = document.getElementById(fieldId);
+        const inputDisplay = document.getElementById(fieldId + "-display");
+        const browser = document.getElementById("browser-" + fieldId);
+        const button = document.querySelector(`.browse-btn[data-target="${fieldId}"]`);
+        const arrow = button?.querySelector(".arrow");
+        const label = document.getElementById("selected-name-" + fieldId);
+
+        if (input) {
+            input.value = fieldId === "{{ form.input2.id }}" ? selectedPath : selectedPath;
+            if (inputDisplay) {
+                inputDisplay.value = fieldId === "{{ form.input2.id }}" ? (fileName || selectedPath) : selectedPath;
+            }
+            input.dispatchEvent(new Event('input'));
+        }
+        if (label && fileName) label.textContent = `Selected: ${fileName}`;
+        if (browser) browser.style.display = "none";
+        if (arrow) arrow.textContent = "v";
+    }
+});
+</script>
+{% endblock %}

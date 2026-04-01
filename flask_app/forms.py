@@ -58,7 +58,6 @@ class GammaCorrectionForm(BaseForm):
 
 class ImageCalculatorForm(BaseForm):
     input = StringField('First Operand Folder', validators=[DataRequired()])
-    input2 = StringField('Second Operand Folder', validators=[DataRequired()])
     operation = HiddenField('Operation', validators=[DataRequired()], default='image_calculator')
     calculator_operation = SelectField(
         'Calculator Operation',
@@ -77,6 +76,7 @@ class ImageCalculatorForm(BaseForm):
         ],
         default='add'
     )
+    input2 = StringField('Second Operand Folder or Number', validators=[DataRequired()])
     save_as_float = BooleanField('Save as float')
 
 

@@ -11,4 +11,4 @@ class ImageCalculator(BaseOperation):
         return ImageCalculatorForm
 
     def get_template(self):
-        return "form_autofill_output.html"
+        return "form_image_calculator.html"
