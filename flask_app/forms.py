@@ -46,6 +46,11 @@ class AdaptiveHistogramEqualizationForm(BaseForm):
     clip_limit = FloatField('Clip Limit', default=0.03)
 
 
+class GaussianBlurForm(BaseForm):
+    operation = HiddenField('Operation', validators=[DataRequired()], default='gaussian_blur')
+    sigma = FloatField('Sigma', default=1.0)
+
+
 class IlastikForm(BaseForm):
     operation = HiddenField('Operation', validators=[DataRequired()], default='ilastik')
     model_path = StringField('Model path', validators=[DataRequired()])
