@@ -56,6 +56,30 @@ class GammaCorrectionForm(BaseForm):
     gamma = FloatField('Gamma', default=1.0)
 
 
+class ImageCalculatorForm(BaseForm):
+    input = StringField('First Operand Folder', validators=[DataRequired()])
+    input2 = StringField('Second Operand Folder', validators=[DataRequired()])
+    operation = HiddenField('Operation', validators=[DataRequired()], default='image_calculator')
+    calculator_operation = SelectField(
+        'Calculator Operation',
+        choices=[
+            ('add', 'add'),
+            ('subtract', 'subtract'),
+            ('multiply', 'multiply'),
+            ('divide', 'divide'),
+            ('and', 'AND'),
+            ('or', 'OR'),
+            ('xor', 'XOR'),
+            ('not', 'NOT'),
+            ('min', 'min'),
+            ('max', 'max'),
+            ('average', 'average'),
+        ],
+        default='add'
+    )
+    save_as_float = BooleanField('Save as float')
+
+
 class IlastikForm(BaseForm):
     operation = HiddenField('Operation', validators=[DataRequired()], default='ilastik')
     model_path = StringField('Model path', validators=[DataRequired()])
