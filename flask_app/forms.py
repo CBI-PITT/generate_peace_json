@@ -56,6 +56,11 @@ class GammaCorrectionForm(BaseForm):
     gamma = FloatField('Gamma', default=1.0)
 
 
+class ResizeImageForm(BaseForm):
+    operation = HiddenField('Operation', validators=[DataRequired()], default='resize_image')
+    scale_factor = FloatField('Scale Factor', default=1.0)
+
+
 class ImageCalculatorForm(BaseForm):
     input = StringField('First Operand Folder', validators=[DataRequired()])
     operation = HiddenField('Operation', validators=[DataRequired()], default='image_calculator')
