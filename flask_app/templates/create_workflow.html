@@ -24,6 +24,9 @@
                     <div class="col-md-2 d-grid">
                         <button id="load-template" class="btn btn-outline-secondary">Load Template</button>
                     </div>
+                    <div class="col-md-1 d-grid">
+                        <button id="delete-template" class="btn btn-outline-danger">Delete</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -329,6 +332,37 @@ $("#load-template").on("click", function () {
         renderWorkflowSteps();
     }).fail(function (xhr) {
         alert(xhr.responseJSON?.error || "Failed to load template.");
+    });
+});
+
+$("#delete-template").on("click", function () {
+    const slug = $("#saved-template").val();
+    const templateName = $("#saved-template option:selected").text();
+    if (!slug) {
+        alert("Please select a template to delete.");
+        return;
+    }
+    if (!window.confirm(`Delete template \"${templateName}\"?`)) {
+        return;
+    }
+
+    $.ajax({
+        url: `/workflow/templates/${slug}/delete`,
+        method: "POST",
+        success: function () {
+            if ($("#template-name").val().trim() === templateName) {
+                $("#template-name").val("");
+            }
+            if ($("#saved-template").val() === slug) {
+                workflow = { steps: [] };
+                renderWorkflowSteps();
+            }
+            fetchTemplates();
+            alert("Template deleted.");
+        },
+        error: function (xhr) {
+            alert(xhr.responseJSON?.error || "Failed to delete template.");
+        }
     });
 });
 

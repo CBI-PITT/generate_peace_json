@@ -304,6 +304,14 @@ def load_workflow_template(name):
         return json.load(f)
 
 
+def delete_workflow_template(name):
+    file_path = get_workflow_template_path(name)
+    if not os.path.exists(file_path):
+        return False
+    os.remove(file_path)
+    return True
+
+
 @app.route("/workflow/new", methods=["GET", "POST"])
 @login_required
 def create_workflow():
@@ -363,6 +371,14 @@ def get_workflow_template_route(template_name):
     if template_data is None:
         return jsonify({'error': 'Template not found'}), 404
     return jsonify(template_data)
+
+
+@app.route('/workflow/templates/<template_name>/delete', methods=['POST'])
+@login_required
+def delete_workflow_template_route(template_name):
+    if not delete_workflow_template(template_name):
+        return jsonify({'error': 'Template not found'}), 404
+    return jsonify({'status': 'ok'})
 
 
 def render_operation_form(operation, as_fragment=True):
