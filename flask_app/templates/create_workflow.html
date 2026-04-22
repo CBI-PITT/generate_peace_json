@@ -109,6 +109,9 @@ function renderWorkflowSteps() {
     workflow.steps.forEach((step, index) => {
         const bindings = Object.entries(step.input || {});
         const mutableFields = (step.mutable_fields || []).filter(fieldName => !(fieldName in (step.input || {})));
+        const editableFields = Object.entries(step.editable_fields || {}).filter(([fieldName]) => {
+            return !(fieldName in (step.input || {})) && !mutableFields.includes(fieldName);
+        });
 
         const mutableFieldsHtml = mutableFields.map(fieldName => {
             const fieldId = fieldIdForStep(index, fieldName);
@@ -133,6 +136,25 @@ function renderWorkflowSteps() {
             `;
         }).join("");
 
+        const editableFieldsHtml = editableFields.map(([fieldName, fieldConfig]) => {
+            const value = step.extras?.[fieldName] ?? "";
+            const fieldType = fieldConfig.field_type || "text";
+            const inputType = fieldType === "number" ? "number" : "text";
+            const label = fieldConfig.label || fieldName;
+            return `
+                <div class="mt-2">
+                    <label class="form-label small text-muted mb-1">${escapeHtml(label)}</label>
+                    <input
+                        type="${escapeHtml(inputType)}"
+                        class="form-control form-control-sm workflow-editable-field"
+                        data-step-index="${index}"
+                        data-field-name="${escapeHtml(fieldName)}"
+                        data-field-type="${escapeHtml(fieldType)}"
+                        value="${escapeHtml(value)}">
+                </div>
+            `;
+        }).join("");
+
         list.append(`
             <li class="list-group-item">
                 <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
@@ -143,6 +165,7 @@ function renderWorkflowSteps() {
                     <div class="flex-grow-1" style="min-width: 280px;">
                         <label class="form-label small mb-1">Step Output Name</label>
                         <input type="text" class="form-control form-control-sm workflow-output-name" data-step-index="${index}" value="${escapeHtml(step.output || '')}">
+                        ${editableFieldsHtml}
                         ${mutableFieldsHtml}
                     </div>
                 </div>
@@ -195,11 +218,24 @@ $("#add-step").on("click", function () {
     const formData = {};
     const processedFields = new Set();
     const mutableFields = [];
+    const editableFields = {};
 
     $("#form-container").find("[data-workflow-mutable='true']").each(function () {
         const name = $(this).attr("name");
         if (name) {
             mutableFields.push(name);
+        }
+    });
+
+    $("#form-container").find("[data-workflow-editable='true']").each(function () {
+        const name = $(this).attr("name");
+        const fieldId = $(this).attr("id");
+        const label = fieldId ? $("#form-container").find(`label[for='${fieldId}']`).first().text().trim() : "";
+        if (name) {
+            editableFields[name] = {
+                label: label || name,
+                field_type: $(this).attr("data-workflow-field-type") || $(this).attr("type") || "text"
+            };
         }
     });
 
@@ -232,7 +268,8 @@ $("#add-step").on("click", function () {
         output,
         operation,
         extras: formData,
-        mutable_fields: [...new Set(mutableFields)]
+        mutable_fields: [...new Set(mutableFields)],
+        editable_fields: editableFields
     });
 
     renderWorkflowSteps();
@@ -390,6 +427,23 @@ $(document).on("change", ".workflow-output-name", function () {
     });
 
     renderWorkflowSteps();
+});
+
+$(document).on("input change", ".workflow-editable-field", function () {
+    const stepIndex = parseInt($(this).data("step-index"), 10);
+    const fieldName = $(this).data("field-name");
+    const fieldType = $(this).data("field-type");
+    if (Number.isNaN(stepIndex) || !workflow.steps[stepIndex] || !fieldName) return;
+
+    let value = $(this).val();
+    if (fieldType === "number") {
+        value = value === "" ? "" : parseInt(value, 10);
+        if (Number.isNaN(value)) {
+            value = "";
+        }
+    }
+
+    workflow.steps[stepIndex].extras[fieldName] = value;
 });
 
 $(document).ready(function () {

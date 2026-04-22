@@ -6,8 +6,8 @@ from forms import BaseForm
 
 class ImarisReaderForm(BaseForm):
     operation = HiddenField('Operation', validators=[DataRequired()], default='imaris_reader_crop')
-    channel = IntegerField('Channel (number, starting with 0)', default='0')
-    resolution_level = IntegerField('Resolution level (number, starting with 0)', default='0')
+    channel = IntegerField('Channel (number, starting with 0)', default='0', render_kw={'data-workflow-editable': 'true', 'data-workflow-field-type': 'number'})
+    resolution_level = IntegerField('Resolution level (number, starting with 0)', default='0', render_kw={'data-workflow-editable': 'true', 'data-workflow-field-type': 'number'})
     z_start = IntegerField("Z start value", default='0')
     z_end = IntegerField("Z end value", default='-1')
     y_start = IntegerField("Y start value", default='0')
