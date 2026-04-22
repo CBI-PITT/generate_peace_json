@@ -3,9 +3,18 @@ from wtforms import Form, StringField, FieldList, FloatField, FormField, Boolean
 from wtforms.validators import DataRequired
 
 
+def workflow_path_field(label, validators=None, default=None, bindable=True):
+    render_kw = {
+        'data-workflow-mutable': 'true',
+        'data-browse-only': 'true',
+        'data-bindable': 'true' if bindable else 'false'
+    }
+    return StringField(label, validators=validators, default=default, render_kw=render_kw)
+
+
 class BaseForm(FlaskForm):
-    input = StringField('Input Location', validators=[DataRequired()])
-    output = StringField('Output Location', validators=[DataRequired()])
+    input = workflow_path_field('Input Location', validators=[DataRequired()])
+    output = workflow_path_field('Output Location', validators=[DataRequired()], bindable=False)
     priority = RadioField('Priority (0=lowest 5=highest)', default='2', choices=[(str(i), str(i)) for i in range(6)])
 
 
@@ -62,7 +71,7 @@ class ResizeImageForm(BaseForm):
 
 
 class ImageCalculatorForm(BaseForm):
-    input = StringField('First Operand Folder', validators=[DataRequired()])
+    input = workflow_path_field('First Operand Folder', validators=[DataRequired()])
     operation = HiddenField('Operation', validators=[DataRequired()], default='image_calculator')
     calculator_operation = SelectField(
         'Calculator Operation',
@@ -87,7 +96,7 @@ class ImageCalculatorForm(BaseForm):
 
 class IlastikForm(BaseForm):
     operation = HiddenField('Operation', validators=[DataRequired()], default='ilastik')
-    model_path = StringField('Model path', validators=[DataRequired()])
+    model_path = workflow_path_field('Model path', validators=[DataRequired()], bindable=False)
     binarize_threshold = FloatField("Threshold for binarization", default=0.5)
 
 
@@ -95,7 +104,7 @@ class DBSCANForm(BaseForm):
     input = HiddenField()
     output = HiddenField()
     operation = HiddenField('Operation', validators=[DataRequired()], default='dbscan')
-    cell_candidates_path = StringField('Detected cells path', validators=[DataRequired()])
+    cell_candidates_path = workflow_path_field('Detected cells path', validators=[DataRequired()])
     epsilon = IntegerField('Maximum Distance in Cluster', validators=[DataRequired()], default=3)
     min_samples = IntegerField('Minimum Number of Samples in Cluster', validators=[DataRequired()], default=2)
 
@@ -109,29 +118,29 @@ class ResNetClassificationForm(BaseForm):
     input = HiddenField()
     output = HiddenField()
     operation = HiddenField('Operation', validators=[DataRequired()], default='resnet_classification')
-    cell_candidates_path = StringField('Detected cells path', validators=[DataRequired()])
-    model_path = StringField('Model path', validators=[DataRequired()])
+    cell_candidates_path = workflow_path_field('Detected cells path', validators=[DataRequired()])
+    model_path = workflow_path_field('Model path', validators=[DataRequired()], bindable=False)
 
 
 class Unet3DForm(BaseForm):
     operation = HiddenField('Operation', validators=[DataRequired()], default='unet_3d')
-    model = StringField('Model path', validators=[DataRequired()])
+    model = workflow_path_field('Model path', validators=[DataRequired()], bindable=False)
 
 
 class DeleteBGDetectionsForm(BaseForm):
     input = HiddenField()
     output = HiddenField()
     operation = HiddenField('Operation', validators=[DataRequired()], default='delete_background_detections')
-    cell_candidates_path = StringField('Detected cells path', validators=[DataRequired()])
-    fg_mask_path = StringField('Foreground mask path', validators=[DataRequired()])
+    cell_candidates_path = workflow_path_field('Detected cells path', validators=[DataRequired()])
+    fg_mask_path = workflow_path_field('Foreground mask path', validators=[DataRequired()])
 
 
 class TransformPointsForm(BaseForm):
     input = HiddenField()
     output = HiddenField()
     operation = HiddenField('Operation', validators=[DataRequired()], default='transform_points')
-    cells_path = StringField('Detected cells path', validators=[DataRequired()])
-    registration_path = StringField('Path to registration folder', validators=[DataRequired()])
+    cells_path = workflow_path_field('Detected cells path', validators=[DataRequired()])
+    registration_path = workflow_path_field('Path to registration folder', validators=[DataRequired()], bindable=False)
 
 
 class MetaFieldForm(Form):
@@ -143,7 +152,7 @@ class CombineWithMetadataForm(BaseForm):
     input = HiddenField()
     output = HiddenField()
     operation = HiddenField('Operation', validators=[DataRequired()], default='combine_with_metadata')
-    cells_path = StringField('Cells CSV path', validators=[DataRequired()])
+    cells_path = workflow_path_field('Cells CSV path', validators=[DataRequired()])
     metadata = FieldList(FormField(MetaFieldForm), min_entries=1)
 
 
@@ -166,7 +175,7 @@ class DenoiseCellposeForm(BaseForm):
 class RemoveStripesFFTForm(BaseForm):
     operation = HiddenField('Operation', validators=[DataRequired()], default='remove_stripes_fft')
     stripe_direction = SelectField("Stripes orientation", choices=[('v', 'vertical'), ('h', 'horizontal')], default='v')
-    composites_dir = StringField("Composites directory (RSCM only)")
+    composites_dir = workflow_path_field("Composites directory (RSCM only)", bindable=False)
 
 
 class SpotiflowForm(BaseForm):

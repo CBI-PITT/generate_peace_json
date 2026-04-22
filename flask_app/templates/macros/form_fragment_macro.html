@@ -37,14 +37,18 @@
         {% elif field.type == 'FieldList' %}
             <div></div>
         {% else %}
-            {% if field.type in ['StringField', 'TextAreaField'] %}
+            {% set render_kw = field.render_kw or {} %}
+            {% set is_browse_only = render_kw.get('data-browse-only') == 'true' %}
+            {% set is_mutable = render_kw.get('data-workflow-mutable') == 'true' %}
+            {% set is_bindable = render_kw.get('data-bindable', 'false') == 'true' %}
+            {% if field.type in ['StringField', 'TextAreaField'] and is_browse_only %}
                 <div class="row">
                     <div class="col-12">
                         {{ field.label(class="form-label") }}
                     </div>
                     <div class="col-12 d-flex align-items-start gap-2">
                         <div class="mb-2">
-                            {{ field(type="hidden", id=field.id, **{'data-bindable': 'true'}) }}
+                            {{ field(type="hidden", id=field.id, **{'data-bindable': 'true' if is_bindable else 'false', 'data-workflow-mutable': 'true' if is_mutable else 'false', 'data-browse-only': 'true'}) }}
                             <div id="selected-name-{{ field.id }}" class="form-text text-muted fst-italic">No file selected</div>
                         </div>
                         <div class="mb-2">
@@ -64,7 +68,7 @@
                 </div>
             {% else %}
                 {{ field.label(class="form-label") }}
-                {{ field(class="form-control", id=field.id, **{'data-bindable': 'true'}) }}
+                {{ field(class="form-control", id=field.id, **{'data-bindable': 'true' if is_bindable else 'false', 'data-workflow-mutable': 'true' if is_mutable else 'false'}) }}
             {% endif %}
         {% endif %}
         </div>
