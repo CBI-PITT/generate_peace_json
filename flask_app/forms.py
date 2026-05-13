@@ -140,7 +140,7 @@ class TransformPointsForm(BaseForm):
     output = HiddenField()
     operation = HiddenField('Operation', validators=[DataRequired()], default='transform_points')
     cells_path = workflow_path_field('Detected cells path', validators=[DataRequired()])
-    registration_path = workflow_path_field('Path to registration folder', validators=[DataRequired()], bindable=False)
+    registration_path = workflow_path_field('Path to registration folder', validators=[DataRequired()])
 
 
 class MetaFieldForm(Form):
