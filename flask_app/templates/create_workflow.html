@@ -5,6 +5,32 @@
 <div class="container py-5">
         <h2 class="mb-4">Create a New Workflow</h2>
 
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-4">
+                        <label for="template-name" class="form-label">Template Name</label>
+                        <input type="text" id="template-name" class="form-control" placeholder="e.g., cell_counting_standard">
+                    </div>
+                    <div class="col-md-3">
+                        <label for="saved-template" class="form-label">Saved Templates</label>
+                        <select id="saved-template" class="form-select">
+                            <option value="">-- Select a template --</option>
+                        </select>
+                    </div>
+                    <div class="col-md-2 d-grid">
+                        <button id="save-template" class="btn btn-outline-primary">Save Template</button>
+                    </div>
+                    <div class="col-md-2 d-grid">
+                        <button id="load-template" class="btn btn-outline-secondary">Load Template</button>
+                    </div>
+                    <div class="col-md-1 d-grid">
+                        <button id="delete-template" class="btn btn-outline-danger">Delete</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Operation Selection -->
         <div class="card mb-4">
             <div class="card-body">
@@ -66,6 +92,105 @@
 <script>
 let workflow = { steps: [] };
 
+function escapeHtml(value) {
+    return String(value || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/\"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
+
+function fieldIdForStep(stepIndex, fieldName) {
+    return `workflow-step-${stepIndex}-${fieldName.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+}
+
+function renderWorkflowSteps() {
+    const list = $("#workflow-steps");
+    list.empty();
+
+    workflow.steps.forEach((step, index) => {
+        const bindings = Object.entries(step.input || {});
+        const mutableFields = (step.mutable_fields || []).filter(fieldName => !(fieldName in (step.input || {})));
+        const editableFields = Object.entries(step.editable_fields || {}).filter(([fieldName]) => {
+            return !(fieldName in (step.input || {})) && !mutableFields.includes(fieldName);
+        });
+
+        const mutableFieldsHtml = mutableFields.map(fieldName => {
+            const fieldId = fieldIdForStep(index, fieldName);
+            const value = step.extras?.[fieldName] || "";
+            return `
+                <div class="mt-2">
+                    <label class="form-label small text-muted mb-1">${escapeHtml(fieldName)}</label>
+                    <input type="hidden" id="${escapeHtml(fieldId)}" value="${escapeHtml(value)}" data-step-index="${index}" data-field-name="${escapeHtml(fieldName)}">
+                    <div id="selected-name-${escapeHtml(fieldId)}" class="form-text text-muted fst-italic mb-2">${value ? `Selected: ${escapeHtml(value)}` : 'No file selected'}</div>
+                    <button type="button" class="btn btn-outline-secondary btn-sm browse-btn" data-target="${escapeHtml(fieldId)}">
+                        Browse <span class="arrow">▼</span>
+                    </button>
+                    <div class="file-browser-container mt-2" id="browser-${escapeHtml(fieldId)}" style="display: none; border: 1px solid #ccc; padding: 10px;">
+                        <iframe name="iframe-input-${escapeHtml(fieldId)}"
+                            src="/browser/dir/"
+                            width="100%" height="300px"
+                            frameborder="0"
+                            data-field-id="${escapeHtml(fieldId)}">
+                        </iframe>
+                    </div>
+                </div>
+            `;
+        }).join("");
+
+        const editableFieldsHtml = editableFields.map(([fieldName, fieldConfig]) => {
+            const value = step.extras?.[fieldName] ?? "";
+            const fieldType = fieldConfig.field_type || "text";
+            const inputType = fieldType === "number" ? "number" : "text";
+            const label = fieldConfig.label || fieldName;
+            return `
+                <div class="mt-2">
+                    <label class="form-label small text-muted mb-1">${escapeHtml(label)}</label>
+                    <input
+                        type="${escapeHtml(inputType)}"
+                        class="form-control form-control-sm workflow-editable-field"
+                        data-step-index="${index}"
+                        data-field-name="${escapeHtml(fieldName)}"
+                        data-field-type="${escapeHtml(fieldType)}"
+                        value="${escapeHtml(value)}">
+                </div>
+            `;
+        }).join("");
+
+        list.append(`
+            <li class="list-group-item">
+                <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+                    <div>
+                        <strong>Step ${index + 1}:</strong> ${escapeHtml(step.operation)}
+                        <div class="text-muted small mt-1">Inputs: ${bindings.map(([key, value]) => `${escapeHtml(key)} ← ${escapeHtml(value)}`).join(", ") || 'none'}</div>
+                    </div>
+                    <div class="flex-grow-1" style="min-width: 280px;">
+                        <label class="form-label small mb-1">Step Output Name</label>
+                        <input type="text" class="form-control form-control-sm workflow-output-name" data-step-index="${index}" value="${escapeHtml(step.output || '')}">
+                        ${editableFieldsHtml}
+                        ${mutableFieldsHtml}
+                    </div>
+                </div>
+            </li>
+        `);
+    });
+}
+
+function fetchTemplates(selectedSlug = "") {
+    $.getJSON("/workflow/templates", function (data) {
+        const select = $("#saved-template");
+        select.empty();
+        select.append('<option value="">-- Select a template --</option>');
+        (data.templates || []).forEach(function (template) {
+            select.append(`<option value="${escapeHtml(template.slug)}">${escapeHtml(template.name)}</option>`);
+        });
+        if (selectedSlug) {
+            select.val(selectedSlug);
+        }
+    });
+}
+
 // Load the operation form and inject bindable dropdowns
 $("#load-operation").on("click", function () {
     const op = $("#operation").val();
@@ -95,6 +220,27 @@ $("#add-step").on("click", function () {
     // Collect form data (excluding bound fields)
     const formData = {};
     const processedFields = new Set();
+    const mutableFields = [];
+    const editableFields = {};
+
+    $("#form-container").find("[data-workflow-mutable='true']").each(function () {
+        const name = $(this).attr("name");
+        if (name) {
+            mutableFields.push(name);
+        }
+    });
+
+    $("#form-container").find("[data-workflow-editable='true']").each(function () {
+        const name = $(this).attr("name");
+        const fieldId = $(this).attr("id");
+        const label = fieldId ? $("#form-container").find(`label[for='${fieldId}']`).first().text().trim() : "";
+        if (name) {
+            editableFields[name] = {
+                label: label || name,
+                field_type: $(this).attr("data-workflow-field-type") || $(this).attr("type") || "text"
+            };
+        }
+    });
 
     $("#form-container").find("input, select, textarea").each(function () {
         const name = $(this).attr("name");
@@ -124,20 +270,12 @@ $("#add-step").on("click", function () {
         input: inputBindings,
         output,
         operation,
-        extras: formData
+        extras: formData,
+        mutable_fields: [...new Set(mutableFields)],
+        editable_fields: editableFields
     });
 
-    // Render step in UI
-    const stepNumber = workflow.steps.length;
-    $("#workflow-steps").append(`
-        <li class="list-group-item">
-            <strong>Step ${stepNumber}:</strong> ${operation}
-            <span class="text-muted">
-                (inputs: ${Object.entries(inputBindings).map(([k, v]) => `${k} ← ${v}`).join(", ") || 'none'},
-                output: ${output})
-            </span>
-        </li>
-    `);
+    renderWorkflowSteps();
 
     // Reset
     $("#form-container").empty();
@@ -155,8 +293,75 @@ $("#submit-workflow").on("click", function () {
         success: function () {
             alert("Workflow saved!");
             workflow.steps = [];
-            $("#workflow-steps").empty();
+            renderWorkflowSteps();
             $("#input-source").html('<option value="">None</option>');
+        }
+    });
+});
+
+$("#save-template").on("click", function () {
+    const name = $("#template-name").val().trim();
+    if (!name) {
+        alert("Please enter a template name.");
+        return;
+    }
+    $.ajax({
+        url: "/workflow/templates/save",
+        method: "POST",
+        contentType: "application/json",
+        data: JSON.stringify({
+            name,
+            workflow
+        }),
+        success: function (data) {
+            fetchTemplates(data.template.slug);
+            alert("Template saved!");
+        },
+        error: function (xhr) {
+            alert(xhr.responseJSON?.error || "Failed to save template.");
+        }
+    });
+});
+
+$("#load-template").on("click", function () {
+    const slug = $("#saved-template").val();
+    if (!slug) return;
+    $.getJSON(`/workflow/templates/${slug}`, function (data) {
+        workflow = data.workflow || { steps: [] };
+        $("#template-name").val(data.name || slug);
+        renderWorkflowSteps();
+    }).fail(function (xhr) {
+        alert(xhr.responseJSON?.error || "Failed to load template.");
+    });
+});
+
+$("#delete-template").on("click", function () {
+    const slug = $("#saved-template").val();
+    const templateName = $("#saved-template option:selected").text();
+    if (!slug) {
+        alert("Please select a template to delete.");
+        return;
+    }
+    if (!window.confirm(`Delete template \"${templateName}\"?`)) {
+        return;
+    }
+
+    $.ajax({
+        url: `/workflow/templates/${slug}/delete`,
+        method: "POST",
+        success: function () {
+            if ($("#template-name").val().trim() === templateName) {
+                $("#template-name").val("");
+            }
+            if ($("#saved-template").val() === slug) {
+                workflow = { steps: [] };
+                renderWorkflowSteps();
+            }
+            fetchTemplates();
+            alert("Template deleted.");
+        },
+        error: function (xhr) {
+            alert(xhr.responseJSON?.error || "Failed to delete template.");
         }
     });
 });
@@ -203,10 +408,8 @@ function addOutputBindings() {
 }
 
 function setupBrowseButtons() {
-    console.log("setupBrowseButtons");
-    $("#form-container").off("click", ".browse-btn");
-    $("#form-container").on("click", ".browse-btn", function () {
-        console.log("click");
+    $(document).off("click.workflowBrowse", ".browse-btn");
+    $(document).on("click.workflowBrowse", ".browse-btn", function () {
         const fieldId = $(this).data("target");
         const browser = $("#browser-" + fieldId);
         const arrow = $(this).find(".arrow");
@@ -216,23 +419,8 @@ function setupBrowseButtons() {
         arrow.text(isVisible ? "▼" : "▲");
     });
 
-    // Optional: handle postMessage from iframe
-    window.addEventListener("message", function(event) {
-        const { fieldId, selectedPath } = event.data;
-        if (fieldId && selectedPath) {
-            const input = document.getElementById(fieldId);
-            const browser = document.getElementById("browser-" + fieldId);
-            const button = document.querySelector(`.browse-btn[data-target="${fieldId}"]`);
-            const arrow = button?.querySelector(".arrow");
-
-            if (input) input.value = selectedPath;
-            if (browser) browser.style.display = "none";
-            if (arrow) arrow.textContent = "▼";
-        }
-    });
 }
 window.addEventListener("message", function(event) {
-    console.log("Message!");
     const { fieldId, selectedPath, fileName } = event.data;
     if (fieldId && selectedPath) {
         const input = document.getElementById(fieldId);
@@ -242,10 +430,59 @@ window.addEventListener("message", function(event) {
         const label = document.getElementById("selected-name-" + fieldId);
 
         if (input) input.value = selectedPath;
-        if (label && fileName) label.textContent = `Selected: ${fileName}`;
+        if (input?.dataset.stepIndex !== undefined && input?.dataset.fieldName) {
+            const stepIndex = parseInt(input.dataset.stepIndex, 10);
+            const fieldName = input.dataset.fieldName;
+            if (!Number.isNaN(stepIndex) && workflow.steps[stepIndex]) {
+                workflow.steps[stepIndex].extras[fieldName] = selectedPath;
+            }
+        }
+        if (label) label.textContent = `Selected: ${selectedPath}`;
         if (browser) browser.style.display = "none";
         if (arrow) arrow.textContent = "▼";
     }
+});
+
+$(document).on("change", ".workflow-output-name", function () {
+    const stepIndex = parseInt($(this).data("step-index"), 10);
+    if (Number.isNaN(stepIndex) || !workflow.steps[stepIndex]) return;
+
+    const oldOutput = workflow.steps[stepIndex].output;
+    const newOutput = $(this).val();
+    workflow.steps[stepIndex].output = newOutput;
+
+    workflow.steps.forEach(function (step, index) {
+        if (index <= stepIndex) return;
+        Object.keys(step.input || {}).forEach(function (key) {
+            if (step.input[key] === oldOutput) {
+                step.input[key] = newOutput;
+            }
+        });
+    });
+
+    renderWorkflowSteps();
+});
+
+$(document).on("input change", ".workflow-editable-field", function () {
+    const stepIndex = parseInt($(this).data("step-index"), 10);
+    const fieldName = $(this).data("field-name");
+    const fieldType = $(this).data("field-type");
+    if (Number.isNaN(stepIndex) || !workflow.steps[stepIndex] || !fieldName) return;
+
+    let value = $(this).val();
+    if (fieldType === "number") {
+        value = value === "" ? "" : parseInt(value, 10);
+        if (Number.isNaN(value)) {
+            value = "";
+        }
+    }
+
+    workflow.steps[stepIndex].extras[fieldName] = value;
+});
+
+$(document).ready(function () {
+    fetchTemplates();
+    setupBrowseButtons();
 });
 </script>
 {% endblock %}

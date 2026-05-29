@@ -8,6 +8,7 @@ from flask import Flask, render_template, request, jsonify, redirect, url_for
 from flask import flash
 from flask import render_template_string
 from flask_login import login_required, current_user
+from werkzeug.utils import secure_filename
 
 from operations import BaseOperation, BaseReader
 from workflows import BaseWorkflow
@@ -24,6 +25,7 @@ app.config['SECRET_KEY'] = 'your_secret_key'
 app.config['WTF_CSRF_ENABLED'] = False
 
 app.template_folder = 'templates'
+WORKFLOW_TEMPLATE_FOLDER = os.path.join(os.path.dirname(__file__), 'saved_workflows')
 
 # Register the browser app blueprint
 # app.register_blueprint(extended_app, url_prefix='/browser')
@@ -244,6 +246,72 @@ def save_to_json(workflow):
     os.chmod(json_file_path, 0o664)
 
 
+def get_user_workflow_template_dir():
+    user = secure_filename(current_user.get_id() or 'anonymous')
+    template_dir = os.path.join(WORKFLOW_TEMPLATE_FOLDER, user)
+    os.makedirs(template_dir, exist_ok=True)
+    return template_dir
+
+
+def get_workflow_template_path(name):
+    template_name = secure_filename(name or '')
+    if not template_name:
+        raise ValueError('Template name is required')
+    if not template_name.endswith('.json'):
+        template_name = f'{template_name}.json'
+    return os.path.join(get_user_workflow_template_dir(), template_name)
+
+
+def list_workflow_templates():
+    template_dir = get_user_workflow_template_dir()
+    templates = []
+    for filename in sorted(os.listdir(template_dir)):
+        if not filename.endswith('.json'):
+            continue
+        file_path = os.path.join(template_dir, filename)
+        try:
+            with open(file_path, 'r') as f:
+                data = json.load(f)
+        except Exception:
+            continue
+        templates.append({
+            'name': data.get('name') or os.path.splitext(filename)[0],
+            'slug': os.path.splitext(filename)[0],
+            'updated_at': data.get('updated_at')
+        })
+    return templates
+
+
+def save_workflow_template(name, workflow_data):
+    file_path = get_workflow_template_path(name)
+    payload = {
+        'name': name,
+        'owner': current_user.get_id(),
+        'updated_at': datetime.now().isoformat(),
+        'workflow': workflow_data,
+    }
+    with open(file_path, 'w') as f:
+        json.dump(payload, f, indent=2)
+    os.chmod(file_path, 0o664)
+    return payload
+
+
+def load_workflow_template(name):
+    file_path = get_workflow_template_path(name)
+    if not os.path.exists(file_path):
+        return None
+    with open(file_path, 'r') as f:
+        return json.load(f)
+
+
+def delete_workflow_template(name):
+    file_path = get_workflow_template_path(name)
+    if not os.path.exists(file_path):
+        return False
+    os.remove(file_path)
+    return True
+
+
 @app.route("/workflow/new", methods=["GET", "POST"])
 @login_required
 def create_workflow():
@@ -272,6 +340,45 @@ def create_workflow():
         category_ops = [x for x in all_operations.keys() if all_operations[x].category == category]
         available_ops[category] = category_ops
     return render_template("create_workflow.html", available_operations=available_ops)
+
+
+@app.route('/workflow/templates', methods=['GET'])
+@login_required
+def workflow_templates():
+    return jsonify({'templates': list_workflow_templates()})
+
+
+@app.route('/workflow/templates/save', methods=['POST'])
+@login_required
+def save_workflow_template_route():
+    data = request.get_json() or {}
+    name = (data.get('name') or '').strip()
+    workflow_data = data.get('workflow') or {}
+
+    if not name:
+        return jsonify({'error': 'Template name is required'}), 400
+    if not isinstance(workflow_data, dict) or not isinstance(workflow_data.get('steps'), list):
+        return jsonify({'error': 'Workflow must include a steps list'}), 400
+
+    payload = save_workflow_template(name, workflow_data)
+    return jsonify({'status': 'ok', 'template': {'name': payload['name'], 'slug': secure_filename(name)}})
+
+
+@app.route('/workflow/templates/<template_name>', methods=['GET'])
+@login_required
+def get_workflow_template_route(template_name):
+    template_data = load_workflow_template(template_name)
+    if template_data is None:
+        return jsonify({'error': 'Template not found'}), 404
+    return jsonify(template_data)
+
+
+@app.route('/workflow/templates/<template_name>/delete', methods=['POST'])
+@login_required
+def delete_workflow_template_route(template_name):
+    if not delete_workflow_template(template_name):
+        return jsonify({'error': 'Template not found'}), 404
+    return jsonify({'status': 'ok'})
 
 
 def render_operation_form(operation, as_fragment=True):

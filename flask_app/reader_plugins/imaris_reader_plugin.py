@@ -6,9 +6,9 @@ from forms import BaseForm
 
 class ImarisReaderForm(BaseForm):
     operation = HiddenField('Operation', validators=[DataRequired()], default='imaris_reader')
-    channel = IntegerField('Channel (number, starting with 0)', default='0')
+    channel = IntegerField('Channel (number, starting with 0)', default='0', render_kw={'data-workflow-editable': 'true', 'data-workflow-field-type': 'number'})
     all_channels = BooleanField("Extract all channels")
-    resolution_level = IntegerField('Resolution level (number, starting with 0)', default='0')
+    resolution_level = IntegerField('Resolution level (number, starting with 0)', default='0', render_kw={'data-workflow-editable': 'true', 'data-workflow-field-type': 'number'})
     compress = BooleanField("Compressed and tiled tiffs")
 
 
