@@ -1,7 +1,7 @@
 import json
 import os
 
-from wtforms import StringField, SubmitField, Form, HiddenField
+from wtforms import FloatField, HiddenField
 from wtforms.validators import DataRequired
 from operations import BaseReader
 from forms import BaseForm
@@ -9,10 +9,10 @@ from forms import BaseForm
 
 class TiffSeriesReaderForm(BaseForm):
     output = HiddenField()
-    operation = StringField('Operation', validators=[DataRequired()], default='tiff_series_reader', render_kw={"disabled": True})
-    resolution_z = StringField('Z resolution, microns', default='1')
-    resolution_y = StringField('Y resolution, microns', default='1')
-    resolution_x = StringField('X resolution, microns', default='1')
+    operation = HiddenField('Operation', validators=[DataRequired()], default='tiff_series_reader')
+    resolution_z = FloatField('Z resolution, microns', default=1, render_kw={'data-workflow-editable': 'true', 'data-workflow-field-type': 'number'})
+    resolution_y = FloatField('Y resolution, microns', default=1, render_kw={'data-workflow-editable': 'true', 'data-workflow-field-type': 'number'})
+    resolution_x = FloatField('X resolution, microns', default=1, render_kw={'data-workflow-editable': 'true', 'data-workflow-field-type': 'number'})
 
 
 class TiffSeriesReaderPlugin(BaseReader):

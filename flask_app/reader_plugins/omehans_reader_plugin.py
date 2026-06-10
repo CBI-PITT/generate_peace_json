@@ -1,13 +1,13 @@
-from wtforms import StringField, SubmitField, Form
+from wtforms import HiddenField, IntegerField
 from wtforms.validators import DataRequired
 from operations import BaseReader
 from forms import BaseForm
 
 
 class OMEhansReaderForm(BaseForm):
-    operation = StringField('Operation', validators=[DataRequired()], default='omehans_reader', render_kw={"disabled": True})
-    channel = StringField('Channel (number, starting with 0)', default='0', render_kw={'data-workflow-editable': 'true', 'data-workflow-field-type': 'number'})
-    resolution_level = StringField('Resolution level (number, starting with 0)', default='0', render_kw={'data-workflow-editable': 'true', 'data-workflow-field-type': 'number'})
+    operation = HiddenField('Operation', validators=[DataRequired()], default='omehans_reader')
+    channel = IntegerField('Channel (number, starting with 0)', default='0', render_kw={'data-workflow-editable': 'true', 'data-workflow-field-type': 'number'})
+    resolution_level = IntegerField('Resolution level (number, starting with 0)', default='0', render_kw={'data-workflow-editable': 'true', 'data-workflow-field-type': 'number'})
 
 
 class ImarisReaderPlugin(BaseReader):
