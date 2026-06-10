@@ -12,6 +12,15 @@ def workflow_path_field(label, validators=None, default=None, bindable=True):
     return StringField(label, validators=validators, default=default, render_kw=render_kw)
 
 
+def workflow_text_field(label, validators=None, default=None, bindable=False):
+    render_kw = {
+        'data-workflow-editable': 'true',
+        'data-workflow-field-type': 'text',
+        'data-bindable': 'true' if bindable else 'false'
+    }
+    return StringField(label, validators=validators, default=default, render_kw=render_kw)
+
+
 class BaseForm(FlaskForm):
     input = workflow_path_field('Input Location', validators=[DataRequired()])
     output = workflow_path_field('Output Location', validators=[DataRequired()], bindable=False)
@@ -111,7 +120,7 @@ class DBSCANForm(BaseForm):
 
 class CellposeForm(BaseForm):
     operation = HiddenField('Operation', validators=[DataRequired()], default='cellpose')
-    model = StringField('Model name (general, nuclei, cyto, cyto2 etc)', validators=[DataRequired()], default='general')
+    model = workflow_text_field('Model name (general, nuclei, cyto, cyto2 etc)', validators=[DataRequired()], default='general')
 
 
 class ResNetClassificationForm(BaseForm):

@@ -12,6 +12,8 @@
             {{ form.hidden_tag() }}
             {% for field in form %}
                 {% if field.widget.input_type != 'hidden' %}
+                    {% set render_kw = field.render_kw or {} %}
+                    {% set is_browse_only = render_kw.get('data-browse-only') == 'true' %}
                     <div class="mb-3">
                     {% if field.type == 'BooleanField' %}
                         <div class="form-check">
@@ -42,7 +44,7 @@
                         </div>
                     {% else %}
                         {{ field.label(class="form-label") }}
-                        {% if field.type in ['StringField', 'TextAreaField'] %}
+                        {% if field.type in ['StringField', 'TextAreaField'] and is_browse_only %}
                             <div class="mb-2">
                                 {{ field(type="hidden", id=field.id, **{'data-bindable': 'true'}) }}
                                 <div id="selected-name-{{ field.id }}" class="form-text text-muted fst-italic">No file selected</div>
