@@ -120,6 +120,14 @@ class DBSCANForm(BaseForm):
 
 class CellposeForm(BaseForm):
     operation = HiddenField('Operation', validators=[DataRequired()], default='cellpose')
+    implementation = SelectField(
+        'Implementation',
+        choices=[
+            ('3d_chunks', '3D chunks'),
+            ('2d_planes', '2D planes')
+        ],
+        default='3d_chunks'
+    )
     model = workflow_text_field('Model name (general, nuclei, cyto, cyto2 etc)', validators=[DataRequired()], default='general')
     diameter = IntegerField(
         'Diameter',
