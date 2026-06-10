@@ -121,6 +121,11 @@ class DBSCANForm(BaseForm):
 class CellposeForm(BaseForm):
     operation = HiddenField('Operation', validators=[DataRequired()], default='cellpose')
     model = workflow_text_field('Model name (general, nuclei, cyto, cyto2 etc)', validators=[DataRequired()], default='general')
+    diameter = IntegerField(
+        'Diameter',
+        default=15,
+        render_kw={'data-workflow-editable': 'true', 'data-workflow-field-type': 'number'}
+    )
 
 
 class ResNetClassificationForm(BaseForm):
