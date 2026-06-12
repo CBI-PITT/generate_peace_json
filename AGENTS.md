@@ -21,6 +21,16 @@ There are also no repo-local agent rule files present:
 
 If those files are added later, update this document to reflect them.
 
+## Change Notes
+
+Use `/h20/CBI/Iana/src/peace/AGENT_NOTES.md` as the root change log and `/h20/CBI/Iana/src/peace/generate_peace_json_test/AGENT_NOTES.md` as the Flask-local change log.
+
+Before making new changes here, read the last 100 lines of both files.
+
+After every change that touches Flask app files, append a brief note to both files.
+
+If a change does not modify files in this subproject, do not update the Flask-local notes file.
+
 ## Repository Layout
 
 - Root: `/h20/CBI/Iana/src/peace`
