@@ -13,7 +13,7 @@
             {% for field in form %}
                 {% if field.widget.input_type != 'hidden' %}
                     {% set render_kw = field.render_kw or {} %}
-                    {% set is_browse_only = render_kw.get('data-browse-only') == 'true' %}
+                    {% set is_browse_only = render_kw.get('data-browse-only') == 'true' and file_browser_enabled %}
                     <div class="mb-3">
                     {% if field.type == 'BooleanField' %}
                         <div class="form-check">
@@ -73,6 +73,7 @@
         </form>
     </div>
 </div>
+{% if file_browser_enabled %}
 <script>
 let lastBrowserPath = "/browser/dir/";
 
@@ -116,4 +117,5 @@ window.addEventListener("message", function(event) {
     }
 });
 </script>
+{% endif %}
 {% endblock %}

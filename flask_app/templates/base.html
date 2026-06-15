@@ -17,17 +17,19 @@
             <a class="navbar-brand" href="{{ url_for('index') }}">Home</a>
         </div>
         <div class="container-fluid">
+            {% if file_browser_enabled %}
             <a class="navbar-brand" href="{{ url_for('flask_file_browser.browse_fs') }}">File Browser</a>
+            {% endif %}
         </div>
         <div class="container-fluid">
             <a class="navbar-brand" href="{{ url_for('slurm_queue') }}">Queue</a>
         </div>
         <div class="container-fluid">
-            {% if not current_user.is_authenticated %}
+            {% if auth_enabled and not current_user.is_authenticated %}
             <a class="navbar-brand" href="{{ url_for('login') }}">
                 Login
             </a>
-            {% elif current_user.is_authenticated %}
+            {% elif auth_enabled and current_user.is_authenticated %}
             <a class="navbar-brand" href="{{ url_for('logout') }}">
                 Logout: {{ current_user.get_id() }}
             </a>

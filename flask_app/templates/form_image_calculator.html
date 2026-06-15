@@ -13,6 +13,7 @@
 
             <div class="mb-3">
                 {{ form.input.label(class="form-label") }}
+                {% if file_browser_enabled %}
                 {{ form.input(type="hidden", id=form.input.id) }}
                 <div id="selected-name-{{ form.input.id }}" class="form-text text-muted fst-italic">No file selected</div>
                 <div class="mt-2">
@@ -28,6 +29,9 @@
                         data-field-id="{{ form.input.id }}">
                     </iframe>
                 </div>
+                {% else %}
+                {{ form.input(class="form-control", id=form.input.id) }}
+                {% endif %}
             </div>
 
             <div class="mb-3">
@@ -37,6 +41,7 @@
 
             <div class="mb-3">
                 {{ form.input2.label(class="form-label") }}
+                {% if file_browser_enabled %}
                 {{ form.input2(type="hidden", id=form.input2.id) }}
                 <div class="d-flex gap-2 align-items-start">
                     <div class="flex-grow-1">
@@ -57,10 +62,14 @@
                         data-field-id="{{ form.input2.id }}">
                     </iframe>
                 </div>
+                {% else %}
+                {{ form.input2(class="form-control", id=form.input2.id) }}
+                {% endif %}
             </div>
 
             <div class="mb-3">
                 {{ form.output.label(class="form-label") }}
+                {% if file_browser_enabled %}
                 {{ form.output(type="hidden", id=form.output.id) }}
                 <div id="selected-name-{{ form.output.id }}" class="form-text text-muted fst-italic">No file selected</div>
                 <div class="mt-2">
@@ -76,6 +85,9 @@
                         data-field-id="{{ form.output.id }}">
                     </iframe>
                 </div>
+                {% else %}
+                {{ form.output(class="form-control", id=form.output.id) }}
+                {% endif %}
             </div>
 
             <div class="mb-3">
@@ -104,6 +116,7 @@
 {% endblock %}
 
 {% block scripts %}
+{% if file_browser_enabled %}
 <script>
 let lastBrowserPath = "/browser/dir/";
 
@@ -192,4 +205,33 @@ window.addEventListener("message", function(event) {
     }
 });
 </script>
+{% else %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const inputField = document.getElementById("{{ form.input.id }}");
+    if (inputField) {
+        inputField.addEventListener("input", function () {
+            const inputDir = inputField.value;
+            if (!inputDir) {
+                document.getElementById("{{ form.output.id }}").value = "";
+                return;
+            }
+
+            fetch('/get_output_dir', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ input: inputDir })
+            })
+                .then(response => response.ok ? response.json() : Promise.reject())
+                .then(response => {
+                    document.getElementById("{{ form.output.id }}").value = response.output || "";
+                })
+                .catch(() => {
+                    document.getElementById("{{ form.output.id }}").value = "";
+                });
+        });
+    }
+});
+</script>
+{% endif %}
 {% endblock %}

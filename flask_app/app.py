@@ -1,37 +1,67 @@
 import json
 import importlib
 import os
+from pathlib import Path
 import subprocess
 from datetime import datetime
 
 from flask import Flask, render_template, request, jsonify, redirect, url_for
 from flask import flash
 from flask import render_template_string
-from flask_login import login_required, current_user
+from flask_login import login_required as flask_login_required, current_user
 from werkzeug.utils import secure_filename
 
 from operations import BaseOperation, BaseReader
 from workflows import BaseWorkflow
 
-# from flask_file_browser import extended_app
-from flask_file_browser import routes
 from auth import setup_auth, user_info
-from config import JSON_FOLDER
+from config import ENABLE_AUTH, ENABLE_FILE_BROWSER, JSON_FOLDER, SECRET_KEY
 from utils.users import get_user
 
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'your_secret_key'
+app.config['SECRET_KEY'] = SECRET_KEY
 app.config['WTF_CSRF_ENABLED'] = False
+app.config['ENABLE_FILE_BROWSER'] = ENABLE_FILE_BROWSER
+app.config['ENABLE_AUTH'] = ENABLE_AUTH
 
 app.template_folder = 'templates'
 WORKFLOW_TEMPLATE_FOLDER = os.path.join(os.path.dirname(__file__), 'saved_workflows')
 
-# Register the browser app blueprint
-# app.register_blueprint(extended_app, url_prefix='/browser')
-app = routes.init_blueprint(app, prefix="/browser")
 
-app, login_manager = setup_auth(app)
+def require_login(view):
+    if ENABLE_AUTH:
+        return flask_login_required(view)
+    return view
+
+
+if ENABLE_FILE_BROWSER:
+    from flask_file_browser import routes
+    app = routes.init_blueprint(app, prefix="/browser")
+
+if ENABLE_AUTH:
+    app, login_manager = setup_auth(app)
+
+
+@app.context_processor
+def inject_feature_flags():
+    return {
+        'file_browser_enabled': ENABLE_FILE_BROWSER,
+        'auth_enabled': ENABLE_AUTH
+    }
+
+
+def get_active_username():
+    if ENABLE_AUTH and current_user.is_authenticated:
+        return current_user.get_id()
+
+    home_parts = str(Path.home()).split('/')
+    if home_parts:
+        username = home_parts[-1].strip()
+        if username:
+            return username
+
+    return 'anonymous'
 
 
 # Discover and load plugins
@@ -133,7 +163,7 @@ def read():
 
 
 @app.route('/operation/<operation>', methods=['GET', 'POST'])
-@login_required
+@require_login
 def operation_form(operation):
     if operation in OPERATIONS:
         # load default operations
@@ -204,7 +234,8 @@ def udpdate_steps(workflow):
     """
     Custom logic to make workflow JSON compatible with PEACE backend
     """
-    user = current_user.get_id()
+    user = current_user.get_id() if ENABLE_AUTH and current_user.is_authenticated else None
+
     if user == "CBI_Admin" or not user:
         all_inputs = [x['extras'].get('input', "") for x in workflow.steps]
         all_inputs = [get_user(x) for x in all_inputs if x != ""]
@@ -247,7 +278,7 @@ def save_to_json(workflow):
 
 
 def get_user_workflow_template_dir():
-    user = secure_filename(current_user.get_id() or 'anonymous')
+    user = secure_filename(get_active_username() or 'anonymous')
     template_dir = os.path.join(WORKFLOW_TEMPLATE_FOLDER, user)
     os.makedirs(template_dir, exist_ok=True)
     return template_dir
@@ -286,7 +317,7 @@ def save_workflow_template(name, workflow_data):
     file_path = get_workflow_template_path(name)
     payload = {
         'name': name,
-        'owner': current_user.get_id(),
+        'owner': get_active_username(),
         'updated_at': datetime.now().isoformat(),
         'workflow': workflow_data,
     }
@@ -313,7 +344,7 @@ def delete_workflow_template(name):
 
 
 @app.route("/workflow/new", methods=["GET", "POST"])
-@login_required
+@require_login
 def create_workflow():
     if request.method == "POST":
         data = request.get_json()
@@ -343,13 +374,13 @@ def create_workflow():
 
 
 @app.route('/workflow/templates', methods=['GET'])
-@login_required
+@require_login
 def workflow_templates():
     return jsonify({'templates': list_workflow_templates()})
 
 
 @app.route('/workflow/templates/save', methods=['POST'])
-@login_required
+@require_login
 def save_workflow_template_route():
     data = request.get_json() or {}
     name = (data.get('name') or '').strip()
@@ -365,7 +396,7 @@ def save_workflow_template_route():
 
 
 @app.route('/workflow/templates/<template_name>', methods=['GET'])
-@login_required
+@require_login
 def get_workflow_template_route(template_name):
     template_data = load_workflow_template(template_name)
     if template_data is None:
@@ -374,7 +405,7 @@ def get_workflow_template_route(template_name):
 
 
 @app.route('/workflow/templates/<template_name>/delete', methods=['POST'])
-@login_required
+@require_login
 def delete_workflow_template_route(template_name):
     if not delete_workflow_template(template_name):
         return jsonify({'error': 'Template not found'}), 404
@@ -415,6 +446,9 @@ def get_operation_form():
 
 @app.route("/cancel", methods=["POST"])
 def cancel_job():
+    if not ENABLE_AUTH:
+        return jsonify({"message": "Job cancellation is disabled."}), 403
+
     data = request.get_json()
     job_id = data.get("job_id")
 
@@ -431,4 +465,4 @@ def cancel_job():
 
 
 if __name__ == '__main__':
-    app.run(host="0.0.0.0", port=1313, debug=True)
+    app.run(host="0.0.0.0", port=1212, debug=True)

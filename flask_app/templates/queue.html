@@ -20,7 +20,9 @@
                     <th>State</th>
                     <th>Time</th>
                     <th>Priority</th>
+                    {% if auth_enabled %}
                     <th>Action</th>
+                    {% endif %}
                 </tr>
             </thead>
             <tbody>
@@ -33,6 +35,7 @@
                     <td>{{ job["State"] }}</td>
                     <td>{{ job["Time"] }}</td>
                     <td>{{ job["Nodes"] }}</td>
+                    {% if auth_enabled %}
                     <td>
                       {% if current_user.get_id() and (job["Job Name"].startswith(current_user.get_id()) or current_user.get_id() == "CBI_Admin") %}
                           <button class="btn p-0 border-0 cancel-job" title="Cancel Job">
@@ -40,6 +43,7 @@
                           </button>
                       {% endif %}
                     </td>
+                    {% endif %}
                 </tr>
                 {% endfor %}
             </tbody>

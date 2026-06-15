@@ -12,6 +12,15 @@ from flask_login import (LoginManager,
                          login_required,
                          logout_user)
 
+from config import (APP_NAME,
+                    AUTH_BYPASS,
+                    AUTH_DOMAIN_NAME,
+                    AUTH_DOMAIN_PORT,
+                    AUTH_DOMAIN_SERVER,
+                    AUTH_LOGIN_LIMIT,
+                    GA4_GTAG,
+                    SECRET_KEY)
+
 
 def user_info():
     return {'is_authenticated': current_user.is_authenticated,
@@ -24,16 +33,13 @@ class User(UserMixin):
 
 
 def setup_auth(app):
-    ## This import must remain here else circular import error
-    # from BrAinPI import settings
-    from flask_file_browser.routes import settings
     from flask_limiter import Limiter
     from flask_limiter.util import get_remote_address
 
     app.config['SESSION_COOKIE_SECURE'] = True
 
     ## KEY FOR TESTING ONLY ##
-    app.secret_key = settings.get('auth', 'secret_key')
+    app.secret_key = SECRET_KEY
 
     ############################################################
     # Configure login manager
@@ -75,12 +81,12 @@ def setup_auth(app):
             return redirect(url_for('profile'))
         return render_template('login.html',
                                user=user_info(),
-                               app_name=settings.get('app', 'name'),
+                               app_name=APP_NAME,
                                page_name='Login',
-                               gtag=settings.get('GA4', 'gtag'))
+                               gtag=GA4_GTAG)
 
     @app.route('/login', methods=['POST'])
-    @limiter.limit(settings.get('auth', 'login_limit'))
+    @limiter.limit(AUTH_LOGIN_LIMIT)
     def login_post():
 
         remote_ip = request.remote_addr  # <--Potential to log attempts and restrict number of tries
@@ -90,15 +96,15 @@ def setup_auth(app):
 
         ## Check user against domain server
         user = False  # Default to False for security
-        if 'auth' in settings and settings.getboolean('auth', 'bypass_auth') == False:
+        if not AUTH_BYPASS:
             user = domain_auth(username,
                                password,
                                domain_server=r"ldap://{}:{}".format(
-                                   settings.get('auth', 'domain_server'),
-                                   settings.get('auth', 'domain_port')
-                               ),
-                               domain=settings.get('auth', 'domain_name')
-                               )  # Return bool True/False if auth succeeds/fails and None if error
+                                   AUTH_DOMAIN_SERVER,
+                                   AUTH_DOMAIN_PORT
+                                ),
+                               domain=AUTH_DOMAIN_NAME
+                                )  # Return bool True/False if auth succeeds/fails and None if error
 
             if user == False:
                 flash('''Your credentials are not valid''')
@@ -128,9 +134,9 @@ def setup_auth(app):
     def profile():
         return render_template('profile.html',
                                user=user_info(),
-                               app_name=settings.get('app', 'name'),
+                               app_name=APP_NAME,
                                page_name='Profile',
-                               gtag=settings.get('GA4', 'gtag'))
+                               gtag=GA4_GTAG)
 
     @app.route('/logout')
     def logout():
@@ -169,4 +175,3 @@ def domain_auth(user_name, password, domain_server=r"ldap://cbilab.pitt.edu:389"
     except:
         print('An error occured while connecting to the domain server')
         return None
-

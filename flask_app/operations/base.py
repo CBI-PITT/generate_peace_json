@@ -1,9 +1,10 @@
 import json
 import os
+from pathlib import Path
 from datetime import datetime
 from flask_login import current_user
 
-from config import JSON_FOLDER
+from config import ENABLE_AUTH, JSON_FOLDER
 from utils.users import get_user
 
 
@@ -25,6 +26,18 @@ class BaseOperation:
     def get_username(self):
         return get_user(self.form.input.data)
 
+    def get_active_username(self):
+        if ENABLE_AUTH and current_user.is_authenticated:
+            return current_user.get_id()
+
+        home_parts = str(Path.home()).split('/')
+        if home_parts:
+            username = home_parts[-1].strip()
+            if username:
+                return username
+
+        return 'anonymous'
+
     def process_data(self, form):
         self.form = form
         json_data = {
@@ -34,7 +47,7 @@ class BaseOperation:
             "extras": {}
         }
         data = {field.name: field.data for field in form if field.name not in ["submit", "csrf_token", "input", "output", "operation"]}
-        user = current_user.get_id()
+        user = self.get_active_username()
         if user == "CBI_Admin":
             user = self.get_username()
         if user:
@@ -81,7 +94,7 @@ class BaseReader:
             "extras": {}
         }
         data = {field.name: field.data for field in form if field.name not in ["submit", "csrf_token", "input", "output", "operation"]}
-        user = current_user.get_id()
+        user = self.get_active_username()
         if user == "CBI_Admin" or not user:
             user = get_user(form.input.data)
         if user:

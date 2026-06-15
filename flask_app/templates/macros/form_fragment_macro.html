@@ -4,7 +4,7 @@
 {% for field in form %}
     {% if field.widget.input_type != 'hidden' and (not exclude_output or field.name != 'output') %}
         {% set render_kw = field.render_kw or {} %}
-        {% set is_browse_only = render_kw.get('data-browse-only') == 'true' %}
+        {% set is_browse_only = render_kw.get('data-browse-only') == 'true' and file_browser_enabled %}
         {% set is_mutable = render_kw.get('data-workflow-mutable') == 'true' %}
         {% set is_bindable = render_kw.get('data-bindable', 'false') == 'true' %}
         {% set is_editable = render_kw.get('data-workflow-editable') == 'true' %}

@@ -105,6 +105,7 @@ function fieldIdForStep(stepIndex, fieldName) {
     return `workflow-step-${stepIndex}-${fieldName.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
 }
 
+{% if file_browser_enabled %}
 let lastBrowserPath = "/browser/dir/";
 
 function updateBrowserLocation(fieldId) {
@@ -113,6 +114,7 @@ function updateBrowserLocation(fieldId) {
         iframe.setAttribute("src", lastBrowserPath);
     }
 }
+{% endif %}
 
 function renderWorkflowSteps() {
     const list = $("#workflow-steps");
@@ -128,6 +130,7 @@ function renderWorkflowSteps() {
         const mutableFieldsHtml = mutableFields.map(fieldName => {
             const fieldId = fieldIdForStep(index, fieldName);
             const value = step.extras?.[fieldName] || "";
+            {% if file_browser_enabled %}
             return `
                 <div class="mt-2">
                     <label class="form-label small text-muted mb-1">${escapeHtml(fieldName)}</label>
@@ -146,6 +149,19 @@ function renderWorkflowSteps() {
                     </div>
                 </div>
             `;
+            {% else %}
+            return `
+                <div class="mt-2">
+                    <label class="form-label small text-muted mb-1">${escapeHtml(fieldName)}</label>
+                    <input
+                        type="text"
+                        class="form-control form-control-sm workflow-mutable-field"
+                        data-step-index="${index}"
+                        data-field-name="${escapeHtml(fieldName)}"
+                        value="${escapeHtml(value)}">
+                </div>
+            `;
+            {% endif %}
         }).join("");
 
         const editableFieldsHtml = editableFields.map(([fieldName, fieldConfig]) => {
@@ -209,7 +225,9 @@ $("#load-operation").on("click", function () {
         $("#form-container").html(`<div class="card"><div class="card-body">${data.form_html}</div></div>`);
         $("#operation-controls").show();
         addOutputBindings();  // <-- insert dropdowns for binding previous outputs
-        setupBrowseButtons();  // <-- setup "Browse" buttons & iframe toggle
+        {% if file_browser_enabled %}
+        setupBrowseButtons();
+        {% endif %}
     });
 });
 
@@ -417,6 +435,9 @@ function addOutputBindings() {
 }
 
 function setupBrowseButtons() {
+    {% if not file_browser_enabled %}
+    return;
+    {% endif %}
     $(document).off("click.workflowBrowse", ".browse-btn");
     $(document).on("click.workflowBrowse", ".browse-btn", function () {
         const fieldId = $(this).data("target");
@@ -432,6 +453,7 @@ function setupBrowseButtons() {
     });
 
 }
+{% if file_browser_enabled %}
 window.addEventListener("message", function(event) {
     const { fieldId, selectedPath, fileName, nextBrowserPath } = event.data;
     if (fieldId && selectedPath) {
@@ -455,6 +477,7 @@ window.addEventListener("message", function(event) {
         if (arrow) arrow.textContent = "▼";
     }
 });
+{% endif %}
 
 $(document).on("change", ".workflow-output-name", function () {
     const stepIndex = parseInt($(this).data("step-index"), 10);
@@ -493,9 +516,19 @@ $(document).on("input change", ".workflow-editable-field", function () {
     workflow.steps[stepIndex].extras[fieldName] = value;
 });
 
+$(document).on("input change", ".workflow-mutable-field", function () {
+    const stepIndex = parseInt($(this).data("step-index"), 10);
+    const fieldName = $(this).data("field-name");
+    if (Number.isNaN(stepIndex) || !workflow.steps[stepIndex] || !fieldName) return;
+
+    workflow.steps[stepIndex].extras[fieldName] = $(this).val();
+});
+
 $(document).ready(function () {
     fetchTemplates();
+    {% if file_browser_enabled %}
     setupBrowseButtons();
+    {% endif %}
 });
 </script>
 {% endblock %}
