@@ -74,6 +74,15 @@
     </div>
 </div>
 <script>
+let lastBrowserPath = "/browser/dir/";
+
+function updateBrowserLocation(fieldId) {
+    const iframe = document.querySelector(`#browser-${fieldId} iframe`);
+    if (iframe && lastBrowserPath && iframe.getAttribute("src") !== lastBrowserPath) {
+        iframe.setAttribute("src", lastBrowserPath);
+    }
+}
+
 document.addEventListener("DOMContentLoaded", function () {
     document.querySelectorAll(".browse-btn").forEach(function (btn) {
         btn.addEventListener("click", function () {
@@ -82,28 +91,16 @@ document.addEventListener("DOMContentLoaded", function () {
             const arrow = btn.querySelector(".arrow");
 
             const isVisible = browser.style.display === "block";
+            if (!isVisible) {
+                updateBrowserLocation(fieldId);
+            }
             browser.style.display = isVisible ? "none" : "block";
             arrow.textContent = isVisible ? "▼" : "▲";
         });
     });
-
-    // Optional: handle message from iframe
-    window.addEventListener("message", function(event) {
-        const { fieldId, selectedPath } = event.data;
-        if (fieldId && selectedPath) {
-            const input = document.getElementById(fieldId);
-            const browser = document.getElementById("browser-" + fieldId);
-            const button = document.querySelector(`.browse-btn[data-target="${fieldId}"]`);
-            const arrow = button?.querySelector(".arrow");
-
-            if (input) input.value = selectedPath;
-            if (browser) browser.style.display = "none";
-            if (arrow) arrow.textContent = "▼";
-        }
-    });
 });
 window.addEventListener("message", function(event) {
-    const { fieldId, selectedPath, fileName } = event.data;
+    const { fieldId, selectedPath, fileName, nextBrowserPath } = event.data;
     if (fieldId && selectedPath) {
         const input = document.getElementById(fieldId);
         const browser = document.getElementById("browser-" + fieldId);
@@ -111,6 +108,7 @@ window.addEventListener("message", function(event) {
         const arrow = button?.querySelector(".arrow");
         const label = document.getElementById("selected-name-" + fieldId);
 
+        if (nextBrowserPath) lastBrowserPath = nextBrowserPath;
         if (input) input.value = selectedPath;
         if (label && fileName) label.textContent = `Selected: ${fileName}`;
         if (browser) browser.style.display = "none";
