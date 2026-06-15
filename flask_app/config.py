@@ -1,1 +1,4 @@
-JSON_FOLDER = "/h20/CBI/Iana/json"
+from pathlib import Path
+
+
+JSON_FOLDER = str(Path.home() / "json")

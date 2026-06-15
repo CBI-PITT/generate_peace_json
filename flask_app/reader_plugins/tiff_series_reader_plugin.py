@@ -5,6 +5,7 @@ from wtforms import FloatField, HiddenField
 from wtforms.validators import DataRequired
 from operations import BaseReader
 from forms import BaseForm
+from config import JSON_FOLDER
 
 
 class TiffSeriesReaderForm(BaseForm):
@@ -35,7 +36,7 @@ class TiffSeriesReaderPlugin(BaseReader):
         # Save the JSON data to a file
         from datetime import datetime
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        json_file_path = f'/h20/CBI/Iana/json/SLURM_reader_{timestamp}.json'
+        json_file_path = os.path.join(JSON_FOLDER, f'SLURM_reader_{timestamp}.json')
         with open(json_file_path, 'w') as f:
             json.dump(json_data, f)
         os.chmod(json_file_path, 0o664)
