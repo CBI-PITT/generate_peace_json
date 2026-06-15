@@ -105,6 +105,15 @@ function fieldIdForStep(stepIndex, fieldName) {
     return `workflow-step-${stepIndex}-${fieldName.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
 }
 
+let lastBrowserPath = "/browser/dir/";
+
+function updateBrowserLocation(fieldId) {
+    const iframe = document.querySelector(`#browser-${fieldId} iframe`);
+    if (iframe && lastBrowserPath && iframe.getAttribute("src") !== lastBrowserPath) {
+        iframe.setAttribute("src", lastBrowserPath);
+    }
+}
+
 function renderWorkflowSteps() {
     const list = $("#workflow-steps");
     list.empty();
@@ -415,13 +424,16 @@ function setupBrowseButtons() {
         const arrow = $(this).find(".arrow");
 
         const isVisible = browser.is(":visible");
+        if (!isVisible) {
+            updateBrowserLocation(fieldId);
+        }
         browser.toggle();
         arrow.text(isVisible ? "▼" : "▲");
     });
 
 }
 window.addEventListener("message", function(event) {
-    const { fieldId, selectedPath, fileName } = event.data;
+    const { fieldId, selectedPath, fileName, nextBrowserPath } = event.data;
     if (fieldId && selectedPath) {
         const input = document.getElementById(fieldId);
         const browser = document.getElementById("browser-" + fieldId);
@@ -429,6 +441,7 @@ window.addEventListener("message", function(event) {
         const arrow = button?.querySelector(".arrow");
         const label = document.getElementById("selected-name-" + fieldId);
 
+        if (nextBrowserPath) lastBrowserPath = nextBrowserPath;
         if (input) input.value = selectedPath;
         if (input?.dataset.stepIndex !== undefined && input?.dataset.fieldName) {
             const stepIndex = parseInt(input.dataset.stepIndex, 10);
