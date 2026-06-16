@@ -106,3 +106,15 @@ class BaseReader:
         with open(json_file_path, 'w') as f:
             json.dump(json_data, f)
         os.chmod(json_file_path, 0o664)
+
+    def get_active_username(self):
+        if ENABLE_AUTH and current_user.is_authenticated:
+            return current_user.get_id()
+
+        home_parts = str(Path.home()).split('/')
+        if home_parts:
+            username = home_parts[-1].strip()
+            if username:
+                return username
+
+        return 'anonymous'
