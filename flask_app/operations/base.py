@@ -40,8 +40,8 @@ class BaseOperation:
         if user:
             data['user'] = user
 
-        data = self._update_fields(data)
         json_data["extras"] = data
+        json_data = self._update_fields(json_data)
         # Save the JSON data to a file
         from datetime import datetime
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')

@@ -27,27 +27,12 @@ class Ants(BaseOperation):
     def get_template(self):
         return "form_autofill_output.html"
 
-    def _update_fields(self, data):
+    def _update_fields(self, json_data):
+        extras = json_data["extras"]
         new_data = {}
-        for k, v in data.items():
+        for k, v in extras.items():
             if k == "orientation":
                 v = v["select1"][0] + v["select2"][0] + v["select3"][0]
             new_data[k] = v
-        return new_data
-
-    # def process_data(self, form):
-    #     # Example processing logic for filter operation
-    #     json_data = {
-    #         "input": form.input.data,
-    #         "output": form.output.data,
-    #         "operation": self.name,
-    #         "extras": {}
-    #     }
-    #     data = {field.name: field.data for field in form if field.name not in ["submit", "csrf_token", "input", "output", "operation"]}
-    #     json_data["extras"] = data
-    #     # Save the JSON data to a file
-    #     from datetime import datetime
-    #     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    #     with open(f'/h20/CBI/Iana/json/SLURM_settings_{timestamp}.json', 'w') as f:
-    #         import json
-    #         json.dump(json_data, f)
+        json_data["extras"] = new_data
+        return json_data
