@@ -27,7 +27,7 @@
             </div>
         {% elif field.type == 'SelectField' %}
             {{ field.label(class="form-label") }}
-            {{ field(class="form-select", **{'data-bindable': 'false'}) }}
+            {{ field(class="form-select", **{'data-bindable': 'false', 'data-workflow-editable': 'true', 'data-workflow-field-type': 'select'}) }}
         {% elif field.type == 'FloatField' %}
             {{ field.label(class="form-label") }}
             {{ field(class="form-control", **{'data-bindable': 'false', 'data-workflow-editable': 'true' if is_editable else 'false', 'data-workflow-field-type': workflow_field_type}) }}
@@ -35,8 +35,12 @@
             <label class="form-label">{{ field.label.text }}</label>
             <div class="d-flex gap-3">
                 {% for subfield in field %}
+                    {% set subfield_render_kw = subfield.render_kw or {} %}
+                    {% set subfield_is_editable = subfield_render_kw.get('data-workflow-editable') == 'true' %}
+                    {% set subfield_workflow_field_type = subfield_render_kw.get('data-workflow-field-type', '') %}
                     <div class="flex-fill">
-                        {{ subfield(class="form-select", **{'data-bindable': 'false'}) }}
+                        {{ subfield.label(class="form-label small text-muted") }}
+                        {{ subfield(class="form-select", **{'data-bindable': 'false', 'data-workflow-editable': 'true' if subfield_is_editable else 'false', 'data-workflow-field-type': subfield_workflow_field_type}) }}
                     </div>
                 {% endfor %}
             </div>

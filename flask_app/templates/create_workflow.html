@@ -151,8 +151,32 @@ function renderWorkflowSteps() {
         const editableFieldsHtml = editableFields.map(([fieldName, fieldConfig]) => {
             const value = step.extras?.[fieldName] ?? "";
             const fieldType = fieldConfig.field_type || "text";
-            const inputType = fieldType === "number" ? "number" : "text";
             const label = fieldConfig.label || fieldName;
+
+            if (fieldType === "select") {
+                const options = Array.isArray(fieldConfig.options) ? fieldConfig.options : [];
+                const optionsHtml = options.map(option => {
+                    const optionValue = typeof option === "string" ? option : option.value;
+                    const optionLabel = typeof option === "string" ? option : (option.label ?? option.value);
+                    const selected = String(optionValue) === String(value) ? ' selected' : '';
+                    return `<option value="${escapeHtml(optionValue)}"${selected}>${escapeHtml(optionLabel)}</option>`;
+                }).join("");
+
+                return `
+                    <div class="mt-2">
+                        <label class="form-label small text-muted mb-1">${escapeHtml(label)}</label>
+                        <select
+                            class="form-select form-select-sm workflow-editable-field"
+                            data-step-index="${index}"
+                            data-field-name="${escapeHtml(fieldName)}"
+                            data-field-type="${escapeHtml(fieldType)}">
+                            ${optionsHtml}
+                        </select>
+                    </div>
+                `;
+            }
+
+            const inputType = fieldType === "number" ? "number" : "text";
             return `
                 <div class="mt-2">
                     <label class="form-label small text-muted mb-1">${escapeHtml(label)}</label>
@@ -243,11 +267,20 @@ $("#add-step").on("click", function () {
         const name = $(this).attr("name");
         const fieldId = $(this).attr("id");
         const label = fieldId ? $("#form-container").find(`label[for='${fieldId}']`).first().text().trim() : "";
+        const fieldType = $(this).attr("data-workflow-field-type") || $(this).attr("type") || "text";
         if (name) {
             editableFields[name] = {
                 label: label || name,
-                field_type: $(this).attr("data-workflow-field-type") || $(this).attr("type") || "text"
+                field_type: fieldType
             };
+            if (fieldType === "select") {
+                editableFields[name].options = $(this).find("option").map(function () {
+                    return {
+                        value: $(this).attr("value"),
+                        label: $(this).text()
+                    };
+                }).get();
+            }
         }
     });
 

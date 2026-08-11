@@ -72,7 +72,21 @@ ORIENTATION_CHOICES = [
 
 
 class TripleSelectSubForm(Form):
-    select1 = SelectField(choices=ORIENTATION_CHOICES, default='superior')
-    select2 = SelectField(choices=ORIENTATION_CHOICES, default='anterior')
-    select3 = SelectField(choices=ORIENTATION_CHOICES, default='left')
-
+    select1 = SelectField(
+        'Orientation z',
+        choices=ORIENTATION_CHOICES,
+        default='superior',
+        render_kw={'data-workflow-editable': 'true', 'data-workflow-field-type': 'select'}
+    )
+    select2 = SelectField(
+        'Orientation y',
+        choices=ORIENTATION_CHOICES,
+        default='anterior',
+        render_kw={'data-workflow-editable': 'true', 'data-workflow-field-type': 'select'}
+    )
+    select3 = SelectField(
+        'Orientation x',
+        choices=ORIENTATION_CHOICES,
+        default='left',
+        render_kw={'data-workflow-editable': 'true', 'data-workflow-field-type': 'select'}
+    )
