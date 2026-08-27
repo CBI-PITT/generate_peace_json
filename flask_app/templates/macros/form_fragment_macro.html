@@ -27,10 +27,13 @@
             </div>
         {% elif field.type == 'SelectField' %}
             {{ field.label(class="form-label") }}
-            {{ field(class="form-select", **{'data-bindable': 'false', 'data-workflow-editable': 'true', 'data-workflow-field-type': 'select'}) }}
+            {{ field(class="form-select", **{'data-bindable': 'false', 'data-workflow-editable': 'true', 'data-workflow-field-type': 'select', 'data-default-value': field.data if field.data is not none else ''}) }}
         {% elif field.type == 'FloatField' %}
             {{ field.label(class="form-label") }}
-            {{ field(class="form-control", **{'data-bindable': 'false', 'data-workflow-editable': 'true' if is_editable else 'false', 'data-workflow-field-type': workflow_field_type}) }}
+            {{ field(class="form-control", **{'data-bindable': 'false', 'data-workflow-editable': 'true' if field.name != 'priority' and (is_editable or not workflow_field_type) else 'false', 'data-workflow-field-type': workflow_field_type or 'float', 'data-default-value': field.data if field.data is not none else ''}) }}
+        {% elif field.type == 'IntegerField' %}
+            {{ field.label(class="form-label") }}
+            {{ field(class="form-control", **{'data-bindable': 'false', 'data-workflow-editable': 'true' if field.name != 'priority' and (is_editable or not workflow_field_type) else 'false', 'data-workflow-field-type': workflow_field_type or 'integer', 'data-default-value': field.data if field.data is not none else ''}) }}
         {% elif field.type == 'FormField' %}
             <label class="form-label">{{ field.label.text }}</label>
             <div class="d-flex gap-3">
@@ -40,7 +43,7 @@
                     {% set subfield_workflow_field_type = subfield_render_kw.get('data-workflow-field-type', '') %}
                     <div class="flex-fill">
                         {{ subfield.label(class="form-label small text-muted") }}
-                        {{ subfield(class="form-select", **{'data-bindable': 'false', 'data-workflow-editable': 'true' if subfield_is_editable else 'false', 'data-workflow-field-type': subfield_workflow_field_type}) }}
+                        {{ subfield(class="form-select", **{'data-bindable': 'false', 'data-workflow-editable': 'true' if subfield_is_editable else 'false', 'data-workflow-field-type': subfield_workflow_field_type, 'data-default-value': subfield.data if subfield.data is not none else ''}) }}
                     </div>
                 {% endfor %}
             </div>
@@ -74,7 +77,7 @@
                 </div>
             {% else %}
                 {{ field.label(class="form-label") }}
-                {{ field(class="form-control", id=field.id, **{'data-bindable': 'true' if is_bindable else 'false', 'data-workflow-mutable': 'true' if is_mutable else 'false', 'data-workflow-editable': 'true' if is_editable else 'false', 'data-workflow-field-type': workflow_field_type}) }}
+                {{ field(class="form-control", id=field.id, **{'data-bindable': 'true' if is_bindable else 'false', 'data-workflow-mutable': 'true' if is_mutable else 'false', 'data-workflow-editable': 'true' if is_editable else 'false', 'data-workflow-field-type': workflow_field_type, 'data-default-value': field.data if field.data is not none else ''}) }}
             {% endif %}
         {% endif %}
         </div>
