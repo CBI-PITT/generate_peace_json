@@ -1,6 +1,7 @@
 import json
 import importlib
 import os
+import re
 import subprocess
 from datetime import datetime
 
@@ -16,7 +17,7 @@ from workflows import BaseWorkflow
 # from flask_file_browser import extended_app
 from flask_file_browser import routes
 from auth import setup_auth, user_info
-from config import JSON_FOLDER
+from config import JSON_FOLDER, PORT
 from utils.users import get_user
 
 
@@ -73,6 +74,63 @@ print("PLUGINS:", PLUGINS)
 
 READER_PLUGINS = load_reader_plugins('reader_plugins')
 print("READER PLUGINS:", READER_PLUGINS)
+
+
+def normalize_slurm_job_id(job_id):
+    job_id = str(job_id or '').strip()
+    if not job_id:
+        raise ValueError('Missing job ID')
+
+    array_match = re.fullmatch(r'(\d+)_\[([^\]]+)\]', job_id)
+    if array_match:
+        base_job_id, task_expression = array_match.groups()
+        task_expression = task_expression.split('%', 1)[0]
+        if not task_expression or not re.fullmatch(r'[\d,\-:]+', task_expression):
+            raise ValueError(f'Invalid job ID: {job_id}')
+        return f'{base_job_id}_[{task_expression}]'
+
+    if re.fullmatch(r'\d+(?:_\d+)?(?:\.\d+)?', job_id):
+        return job_id
+
+    raise ValueError(f'Invalid job ID: {job_id}')
+
+
+def can_current_user_cancel_slurm_job(job):
+    user_id = current_user.get_id()
+    if not user_id:
+        return False
+    if user_id == 'CBI_Admin':
+        return True
+    return job['User'] == user_id or job['Job Name'].startswith(user_id)
+
+
+def get_slurm_queue_jobs():
+    jobs = []
+    result = subprocess.run(
+        ["squeue", "--format=%i %u %j %P %t %M %Q"],
+        capture_output=True,
+        text=True,
+    )
+    lines = result.stdout.strip().split("\n")
+
+    for line in lines[1:]:
+        if not line.strip():
+            continue
+        job_id, user, job_name, partition, state, time, priority = line.split(maxsplit=6)
+        job = {
+            "Job ID": job_id,
+            "Normalized Job ID": normalize_slurm_job_id(job_id),
+            "User": user,
+            "Job Name": job_name,
+            "Partition": partition,
+            "State": state,
+            "Time": time,
+            "Priority": priority,
+        }
+        job['Can Cancel'] = can_current_user_cancel_slurm_job(job)
+        jobs.append(job)
+
+    return jobs
 
 
 def get_op_descriptions(ops):
@@ -164,25 +222,10 @@ def operation_form(operation):
 
 @app.route('/queue')
 def slurm_queue():
-    jobs = []
-
-    import subprocess
     try:
-        result = subprocess.run(["squeue", "--format=%i %u %j %P %t %M %Q"], capture_output=True, text=True)
-        lines = result.stdout.strip().split("\n")
-
-        for line in lines[1:]:  # Skip the first line (header)
-            job_id, user, job_name, partition, state, time, nodes = line.split(maxsplit=6)
-            jobs.append({
-                "Job ID": job_id,
-                "User": user,
-                "Job Name": job_name,
-                "Partition": partition,
-                "State": state,
-                "Time": time,
-                "Nodes": nodes
-            })
+        jobs = get_slurm_queue_jobs()
     except:
+        jobs = []
         print("ERROR: Couldn't get job list")
     return render_template('queue.html', queue=jobs)
 
@@ -425,20 +468,37 @@ def get_operation_form():
 
 @app.route("/cancel", methods=["POST"])
 def cancel_job():
-    data = request.get_json()
+    data = request.get_json() or {}
     job_id = data.get("job_id")
 
     if not job_id:
         return jsonify({"message": "Missing job ID"}), 400
 
     try:
-        result = subprocess.run(["scancel", str(job_id)], capture_output=True, text=True)
+        normalized_job_id = normalize_slurm_job_id(job_id)
+    except ValueError as e:
+        return jsonify({"message": str(e)}), 400
+
+    try:
+        queue_jobs = get_slurm_queue_jobs()
+    except Exception:
+        return jsonify({"message": "Failed to verify job permissions."}), 500
+
+    matching_job = next((job for job in queue_jobs if job['Normalized Job ID'] == normalized_job_id), None)
+    if matching_job is None:
+        return jsonify({"message": f"Job {normalized_job_id} is no longer in the queue."}), 404
+
+    if not can_current_user_cancel_slurm_job(matching_job):
+        return jsonify({"message": f"You do not have permission to cancel job {normalized_job_id}."}), 403
+
+    try:
+        result = subprocess.run(["scancel", normalized_job_id], capture_output=True, text=True)
         if result.returncode != 0:
             return jsonify({"message": f"Failed to cancel job: {result.stderr}"}), 500
-        return jsonify({"message": f"Job {job_id} cancelled successfully."})
+        return jsonify({"message": f"Job {normalized_job_id} cancelled successfully."})
     except Exception as e:
         return jsonify({"message": str(e)}), 500
 
 
 if __name__ == '__main__':
-    app.run(host="0.0.0.0", port=1313, debug=True)
+    app.run(host="0.0.0.0", port=PORT, debug=True)

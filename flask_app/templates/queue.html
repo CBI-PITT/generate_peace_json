@@ -25,16 +25,16 @@
             </thead>
             <tbody>
                 {% for job in queue %}
-                <tr data-job-id="{{ job['Job ID'] }}">
+                <tr data-job-id="{{ job['Normalized Job ID'] }}">
                     <td>{{ job["Job ID"] }}</td>
                     <td>{{ job["User"] }}</td>
                     <td>{{ job["Job Name"] }}</td>
                     <td>{{ job["Partition"] }}</td>
                     <td>{{ job["State"] }}</td>
                     <td>{{ job["Time"] }}</td>
-                    <td>{{ job["Nodes"] }}</td>
+                    <td>{{ job["Priority"] }}</td>
                     <td>
-                      {% if current_user.get_id() and (job["Job Name"].startswith(current_user.get_id()) or current_user.get_id() == "CBI_Admin") %}
+                      {% if job["Can Cancel"] %}
                           <button class="btn p-0 border-0 cancel-job" title="Cancel Job">
                             <i class="fas fa-trash text-secondary"></i>
                           </button>
