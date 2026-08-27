@@ -1,9 +1,6 @@
-import json
-import os
-from datetime import datetime
 from flask_login import current_user
 
-from config import JSON_FOLDER
+from utils.job_history import new_job_submission_payload, write_submission_json
 from utils.users import get_user
 
 
@@ -27,28 +24,24 @@ class BaseOperation:
 
     def process_data(self, form):
         self.form = form
-        json_data = {
-            "input": form.input.data,
-            "output": form.output.data,
-            "operation": self.name,
-            "extras": {}
-        }
         data = {field.name: field.data for field in form if field.name not in ["submit", "csrf_token", "input", "output", "operation"]}
-        user = current_user.get_id()
-        if user == "CBI_Admin":
-            user = self.get_username()
-        if user:
-            data['user'] = user
+        submitted_by = current_user.get_id() or 'anonymous'
+        job_user = current_user.get_id()
+        if job_user == "CBI_Admin":
+            job_user = self.get_username()
+        if job_user:
+            data['user'] = job_user
 
         data = self._update_fields(data)
-        json_data["extras"] = data
-        # Save the JSON data to a file
-        from datetime import datetime
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        json_file_path = f'{JSON_FOLDER}/SLURM_settings_{timestamp}.json'
-        with open(json_file_path, 'w') as f:
-            json.dump(json_data, f)
-        os.chmod(json_file_path, 0o664)
+        json_data, file_name = new_job_submission_payload(
+            form.input.data,
+            form.output.data,
+            self.name,
+            data,
+            submitted_by,
+            prefix='SLURM_settings'
+        )
+        write_submission_json(file_name, json_data)
 
     def _update_fields(self, data):
         """
@@ -73,23 +66,19 @@ class BaseReader:
         return 'form.html'
 
     def process_data(self, form):
-        # Example processing logic for filter operation
-        json_data = {
-            "input": form.input.data,
-            "output": form.output.data,
-            "operation": self.name,
-            "extras": {}
-        }
         data = {field.name: field.data for field in form if field.name not in ["submit", "csrf_token", "input", "output", "operation"]}
-        user = current_user.get_id()
-        if user == "CBI_Admin" or not user:
-            user = get_user(form.input.data)
-        if user:
-            data['user'] = user
-        json_data["extras"] = data
-        # Save the JSON data to a file
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        json_file_path = f'{JSON_FOLDER}/SLURM_reader_{timestamp}.json'
-        with open(json_file_path, 'w') as f:
-            json.dump(json_data, f)
-        os.chmod(json_file_path, 0o664)
+        submitted_by = current_user.get_id() or 'anonymous'
+        job_user = current_user.get_id()
+        if job_user == "CBI_Admin" or not job_user:
+            job_user = get_user(form.input.data)
+        if job_user:
+            data['user'] = job_user
+        json_data, file_name = new_job_submission_payload(
+            form.input.data,
+            form.output.data,
+            self.name,
+            data,
+            submitted_by,
+            prefix='SLURM_reader'
+        )
+        write_submission_json(file_name, json_data)
