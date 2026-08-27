@@ -149,10 +149,37 @@ function renderWorkflowSteps() {
         }).join("");
 
         const editableFieldsHtml = editableFields.map(([fieldName, fieldConfig]) => {
-            const value = step.extras?.[fieldName] ?? "";
+            const rawValue = step.extras?.[fieldName];
+            const value = rawValue === undefined || rawValue === null || rawValue === ""
+                ? (fieldConfig.default_value ?? "")
+                : rawValue;
             const fieldType = fieldConfig.field_type || "text";
-            const inputType = fieldType === "number" ? "number" : "text";
             const label = fieldConfig.label || fieldName;
+
+            if (fieldType === "select") {
+                const options = Array.isArray(fieldConfig.options) ? fieldConfig.options : [];
+                const optionsHtml = options.map(option => {
+                    const optionValue = typeof option === "string" ? option : option.value;
+                    const optionLabel = typeof option === "string" ? option : (option.label ?? option.value);
+                    const selected = String(optionValue) === String(value) ? ' selected' : '';
+                    return `<option value="${escapeHtml(optionValue)}"${selected}>${escapeHtml(optionLabel)}</option>`;
+                }).join("");
+
+                return `
+                    <div class="mt-2">
+                        <label class="form-label small text-muted mb-1">${escapeHtml(label)}</label>
+                        <select
+                            class="form-select form-select-sm workflow-editable-field"
+                            data-step-index="${index}"
+                            data-field-name="${escapeHtml(fieldName)}"
+                            data-field-type="${escapeHtml(fieldType)}">
+                            ${optionsHtml}
+                        </select>
+                    </div>
+                `;
+            }
+
+            const inputType = ["number", "integer", "float"].includes(fieldType) ? "number" : "text";
             return `
                 <div class="mt-2">
                     <label class="form-label small text-muted mb-1">${escapeHtml(label)}</label>
@@ -173,10 +200,9 @@ function renderWorkflowSteps() {
                     <div>
                         <strong>Step ${index + 1}:</strong> ${escapeHtml(step.operation)}
                         <div class="text-muted small mt-1">Inputs: ${bindings.map(([key, value]) => `${escapeHtml(key)} ← ${escapeHtml(value)}`).join(", ") || 'none'}</div>
+                        <div class="text-muted small">Output: ${escapeHtml(step.output || '') || 'none'}</div>
                     </div>
                     <div class="flex-grow-1" style="min-width: 280px;">
-                        <label class="form-label small mb-1">Step Output Name</label>
-                        <input type="text" class="form-control form-control-sm workflow-output-name" data-step-index="${index}" value="${escapeHtml(step.output || '')}">
                         ${editableFieldsHtml}
                         ${mutableFieldsHtml}
                     </div>
@@ -243,11 +269,22 @@ $("#add-step").on("click", function () {
         const name = $(this).attr("name");
         const fieldId = $(this).attr("id");
         const label = fieldId ? $("#form-container").find(`label[for='${fieldId}']`).first().text().trim() : "";
+        const fieldType = $(this).attr("data-workflow-field-type") || $(this).attr("type") || "text";
+        const defaultValue = $(this).attr("data-default-value");
         if (name) {
             editableFields[name] = {
                 label: label || name,
-                field_type: $(this).attr("data-workflow-field-type") || $(this).attr("type") || "text"
+                field_type: fieldType,
+                default_value: defaultValue
             };
+            if (fieldType === "select") {
+                editableFields[name].options = $(this).find("option").map(function () {
+                    return {
+                        value: $(this).attr("value"),
+                        label: $(this).text()
+                    };
+                }).get();
+            }
         }
     });
 
@@ -267,9 +304,20 @@ $("#add-step").on("click", function () {
             processedFields.add(name);
         } else if (type === "number") {
             const val = $(this).val();
-            formData[name] = val === "" ? null : parseInt(val);
+            const fallback = $(this).attr("data-default-value");
+            const valueToParse = val === "" ? fallback : val;
+            const workflowFieldType = $(this).attr("data-workflow-field-type") || "number";
+            if (valueToParse === "" || valueToParse === undefined) {
+                formData[name] = null;
+            } else if (workflowFieldType === "integer") {
+                formData[name] = parseInt(valueToParse, 10);
+            } else {
+                formData[name] = parseFloat(valueToParse);
+            }
         } else {
-            formData[name] = $(this).val();
+            const val = $(this).val();
+            const fallback = $(this).attr("data-default-value");
+            formData[name] = val === "" && fallback !== undefined ? fallback : val;
         }
 
         processedFields.add(name);
@@ -456,26 +504,6 @@ window.addEventListener("message", function(event) {
     }
 });
 
-$(document).on("change", ".workflow-output-name", function () {
-    const stepIndex = parseInt($(this).data("step-index"), 10);
-    if (Number.isNaN(stepIndex) || !workflow.steps[stepIndex]) return;
-
-    const oldOutput = workflow.steps[stepIndex].output;
-    const newOutput = $(this).val();
-    workflow.steps[stepIndex].output = newOutput;
-
-    workflow.steps.forEach(function (step, index) {
-        if (index <= stepIndex) return;
-        Object.keys(step.input || {}).forEach(function (key) {
-            if (step.input[key] === oldOutput) {
-                step.input[key] = newOutput;
-            }
-        });
-    });
-
-    renderWorkflowSteps();
-});
-
 $(document).on("input change", ".workflow-editable-field", function () {
     const stepIndex = parseInt($(this).data("step-index"), 10);
     const fieldName = $(this).data("field-name");
@@ -483,8 +511,10 @@ $(document).on("input change", ".workflow-editable-field", function () {
     if (Number.isNaN(stepIndex) || !workflow.steps[stepIndex] || !fieldName) return;
 
     let value = $(this).val();
-    if (fieldType === "number") {
-        value = value === "" ? "" : parseInt(value, 10);
+    if (["number", "integer", "float"].includes(fieldType)) {
+        value = value === ""
+            ? ""
+            : (fieldType === "integer" ? parseInt(value, 10) : parseFloat(value));
         if (Number.isNaN(value)) {
             value = "";
         }

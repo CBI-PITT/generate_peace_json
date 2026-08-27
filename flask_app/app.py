@@ -190,14 +190,17 @@ def slurm_queue():
 @app.route('/get_output_dir', methods=['POST'])
 def get_output_dir():
     input_dir = request.json.get('input')
-    dataset_info_path = os.path.join(input_dir, '.dataset_info.json')
-
     try:
-        with open(dataset_info_path, 'r') as f:
-            data = json.load(f)
-            return jsonify({'output': data.get('base_output_dir', '')})
+        return jsonify({'output': get_input_base_output_dir(input_dir) or ''})
     except Exception as e:
         return jsonify({'output': '', 'error': str(e)}), 400
+
+
+def get_input_base_output_dir(input_dir):
+    dataset_info_path = os.path.join(input_dir, '.dataset_info.json')
+    with open(dataset_info_path, 'r') as f:
+        data = json.load(f)
+    return data.get('base_output_dir', '')
 
 
 def udpdate_steps(workflow):
@@ -213,6 +216,13 @@ def udpdate_steps(workflow):
             user = all_inputs[0]
 
     for step in workflow.steps:
+        if not step['extras'].get('output') and step['extras'].get('input'):
+            try:
+                derived_output = get_input_base_output_dir(step['extras']['input'])
+            except Exception:
+                derived_output = ''
+            if derived_output:
+                step['extras']['output'] = derived_output
         if user:
             step['extras']['user'] = user
         if step['operation'] in ['brainreg', 'ants']:
