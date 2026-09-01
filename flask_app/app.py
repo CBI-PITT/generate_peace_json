@@ -1,12 +1,13 @@
 import json
+import copy
 import importlib
 import os
+import re
 import subprocess
 from datetime import datetime
 
 from flask import Flask, render_template, request, jsonify, redirect, url_for
 from flask import flash
-from flask import render_template_string
 from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
 
@@ -16,8 +17,17 @@ from workflows import BaseWorkflow
 # from flask_file_browser import extended_app
 from flask_file_browser import routes
 from auth import setup_auth, user_info
-from config import JSON_FOLDER
+from config import ENABLE_JOB_HISTORY
+from config import PORT
 from utils.users import get_user
+from utils.job_history import list_records
+from utils.job_history import load_job_record
+from utils.job_history import load_workflow_record
+from utils.job_history import new_job_submission_payload
+from utils.job_history import new_workflow_submission_payload
+from utils.job_history import update_record
+from utils.job_history import write_submission_json
+from utils.slurm_status import query_job_states, summarize_job_ids
 
 
 app = Flask(__name__)
@@ -75,6 +85,19 @@ READER_PLUGINS = load_reader_plugins('reader_plugins')
 print("READER PLUGINS:", READER_PLUGINS)
 
 
+STATUS_PRIORITY = {
+    'paused': 0,
+    'running': 1,
+    'pending': 2,
+    'failed_to_dispatch': 3,
+    'failed': 4,
+    'cancelled': 5,
+    'finished successfully': 6,
+    'submitted': 7,
+    'unknown': 8,
+}
+
+
 def get_op_descriptions(ops):
     descriptions = []
     for operation in ops:
@@ -101,9 +124,181 @@ def get_op_categories(ops):
     return categories
 
 
+def get_history_user():
+    return current_user.get_id() or 'anonymous'
+
+
+def can_manage_record(record):
+    user = current_user.get_id()
+    if not current_user.is_authenticated or not user or not record:
+        return False
+    return user == 'CBI_Admin' or record.get('submitted_by') == user
+
+
+def collect_workflow_job_ids(record):
+    job_ids = []
+    for step in record.get('steps', []):
+        for job_id in step.get('slurm_job_ids', []):
+            if job_id not in job_ids:
+                job_ids.append(job_id)
+    return job_ids
+
+
+def best_status(statuses, fallback='submitted'):
+    filtered = [status for status in statuses if status]
+    if not filtered:
+        return fallback
+    return sorted(filtered, key=lambda x: STATUS_PRIORITY.get(x, 99))[0]
+
+
+def enrich_job_record(record, state_map):
+    enriched = copy.deepcopy(record)
+    enriched['current_status'] = summarize_job_ids(
+        enriched.get('slurm_job_ids', []),
+        state_map,
+        fallback=enriched.get('status', 'submitted')
+    )
+    return enriched
+
+
+def enrich_workflow_record(record, state_map):
+    enriched = copy.deepcopy(record)
+    step_statuses = []
+    for step in enriched.get('steps', []):
+        step['current_status'] = summarize_job_ids(
+            step.get('slurm_job_ids', []),
+            state_map,
+            fallback=step.get('status', 'submitted')
+        )
+        step_statuses.append(step['current_status'])
+    enriched['current_status'] = best_status(step_statuses, fallback=enriched.get('status', 'submitted'))
+    return enriched
+
+
+def get_home_history():
+    if not ENABLE_JOB_HISTORY or not current_user.is_authenticated:
+        return [], []
+
+    user = get_history_user()
+    jobs = list_records('job', user)
+    workflows = list_records('workflow', user)
+    all_job_ids = []
+    for record in jobs:
+        all_job_ids.extend(record.get('slurm_job_ids', []))
+    for record in workflows:
+        all_job_ids.extend(collect_workflow_job_ids(record))
+    state_map = query_job_states(all_job_ids)
+    return [enrich_job_record(record, state_map) for record in jobs], [enrich_workflow_record(record, state_map) for record in workflows]
+
+
+def run_control_command(command, job_ids):
+    normalized_job_ids = []
+    for job_id in job_ids:
+        job_text = str(job_id).strip()
+        if not job_text:
+            continue
+        match = re.match(r'^(\d+)', job_text)
+        normalized = match.group(1) if match else job_text
+        if normalized not in normalized_job_ids:
+            normalized_job_ids.append(normalized)
+    if not normalized_job_ids:
+        raise ValueError('No SLURM jobs have been submitted for this record yet')
+    result = subprocess.run(command + normalized_job_ids, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(result.stderr.strip() or 'SLURM command failed')
+    return normalized_job_ids
+
+
+def rerun_job_record(record):
+    payload = record.get('submission_payload') or {}
+    prefix = 'SLURM_reader' if (record.get('submission_json_name') or '').startswith('SLURM_reader_') else 'SLURM_settings'
+    new_payload, file_name = new_job_submission_payload(
+        payload.get('input'),
+        payload.get('output'),
+        payload.get('operation'),
+        copy.deepcopy(payload.get('extras', {})),
+        record.get('submitted_by') or get_history_user(),
+        rerun_of=record.get('job_record_id'),
+        prefix=prefix
+    )
+    write_submission_json(file_name, new_payload)
+    return new_payload
+
+
+def resolve_forked_workflow_steps(record, start_step_id):
+    submission_payload = record.get('submission_payload') or {}
+    original_steps = copy.deepcopy(submission_payload.get('steps', []))
+    step_history_map = {step.get('step_id'): step for step in record.get('steps', [])}
+    start_index = None
+    for index, step in enumerate(original_steps):
+        if step.get('step_id') == start_step_id:
+            start_index = index
+            break
+    if start_index is None:
+        raise ValueError('Workflow step not found')
+
+    subset = original_steps[start_index:]
+    resolved_steps = []
+    previous_outputs = []
+
+    for index, step in enumerate(subset):
+        step_history = step_history_map.get(step.get('step_id')) or {}
+        resolved_extras = copy.deepcopy(step_history.get('resolved_extras') or {})
+        extras = copy.deepcopy(step.get('extras', {}))
+        bindings = copy.deepcopy(step.get('input_bindings', {}))
+        new_bindings = {}
+
+        for field_name, output_name in bindings.items():
+            if output_name in previous_outputs:
+                new_bindings[field_name] = output_name
+                continue
+            if field_name == 'input' and step_history.get('resolved_input'):
+                extras[field_name] = step_history.get('resolved_input')
+            elif field_name in resolved_extras:
+                extras[field_name] = resolved_extras[field_name]
+
+        if index == 0:
+            if resolved_extras:
+                extras = resolved_extras
+            new_bindings = {}
+
+        normalized_step = copy.deepcopy(step)
+        normalized_step['step_id'] = None
+        normalized_step['extras'] = extras
+        normalized_step['input_bindings'] = new_bindings
+        resolved_steps.append(normalized_step)
+        previous_outputs.append(step.get('output_name'))
+
+    return resolved_steps
+
+
+def rerun_workflow_record(record, start_step_id=None):
+    submission_payload = record.get('submission_payload') or {}
+    if start_step_id:
+        steps = resolve_forked_workflow_steps(record, start_step_id)
+    else:
+        steps = copy.deepcopy(submission_payload.get('steps', []))
+        for step in steps:
+            step['step_id'] = None
+    new_payload, file_name = new_workflow_submission_payload(
+        steps,
+        record.get('submitted_by') or get_history_user(),
+        rerun_of=record.get('workflow_id')
+    )
+    write_submission_json(file_name, new_payload)
+    return new_payload
+
+
 @app.route('/')
 def index():
-    return render_template('index.html', operations=[])
+    my_jobs, my_workflows = get_home_history()
+    return render_template(
+        'index.html',
+        operations=[],
+        enable_job_history=ENABLE_JOB_HISTORY,
+        my_jobs=my_jobs,
+        my_workflows=my_workflows,
+    )
 
 
 @app.route('/categories')
@@ -247,13 +442,11 @@ def udpdate_steps(workflow):
 
 
 def save_to_json(workflow):
-    wf_data = {"steps": workflow.steps}
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    fname = f"SLURM_workflow_{timestamp}.json"
-    json_file_path = os.path.join(JSON_FOLDER, fname)
-    with open(json_file_path, "w") as f:
-        json.dump(wf_data, f, indent=2)
-    os.chmod(json_file_path, 0o664)
+    user = current_user.get_id() or 'anonymous'
+    wf_data, file_name = new_workflow_submission_payload(workflow.steps, user)
+    workflow.workflow_id = wf_data['workflow_id']
+    workflow.steps = copy.deepcopy(wf_data['steps'])
+    write_submission_json(file_name, wf_data)
 
 
 def get_user_workflow_template_dir():
@@ -333,7 +526,8 @@ def create_workflow():
                 input=step["input"],
                 output=step["output"],
                 operation=step["operation"],
-                extras=step["extras"]
+                extras=step["extras"],
+                step_id=step.get('step_id')
             )
         workflow = udpdate_steps(workflow)
         save_to_json(workflow)
@@ -423,7 +617,146 @@ def get_operation_form():
     return jsonify({"form_html": form_html})
 
 
+@app.route('/history/job/<job_record_id>/cancel', methods=['POST'])
+@login_required
+def cancel_history_job(job_record_id):
+    if not ENABLE_JOB_HISTORY:
+        return jsonify({'message': 'Job history feature is disabled'}), 404
+    record = load_job_record(get_history_user(), job_record_id)
+    if not can_manage_record(record):
+        return jsonify({'message': 'Not authorized'}), 403
+    try:
+        run_control_command(['scancel'], record.get('slurm_job_ids', []))
+        update_record(record['history_file'], {'status': 'cancelled'})
+        return jsonify({'message': 'Job cancelled'})
+    except Exception as e:
+        return jsonify({'message': str(e)}), 500
+
+
+@app.route('/history/job/<job_record_id>/hold', methods=['POST'])
+@login_required
+def hold_history_job(job_record_id):
+    if not ENABLE_JOB_HISTORY:
+        return jsonify({'message': 'Job history feature is disabled'}), 404
+    record = load_job_record(get_history_user(), job_record_id)
+    if not can_manage_record(record):
+        return jsonify({'message': 'Not authorized'}), 403
+    try:
+        run_control_command(['scontrol', 'hold'], record.get('slurm_job_ids', []))
+        update_record(record['history_file'], {'status': 'paused'})
+        return jsonify({'message': 'Job held'})
+    except Exception as e:
+        return jsonify({'message': str(e)}), 500
+
+
+@app.route('/history/job/<job_record_id>/release', methods=['POST'])
+@login_required
+def release_history_job(job_record_id):
+    if not ENABLE_JOB_HISTORY:
+        return jsonify({'message': 'Job history feature is disabled'}), 404
+    record = load_job_record(get_history_user(), job_record_id)
+    if not can_manage_record(record):
+        return jsonify({'message': 'Not authorized'}), 403
+    try:
+        run_control_command(['scontrol', 'release'], record.get('slurm_job_ids', []))
+        update_record(record['history_file'], {'status': 'submitted'})
+        return jsonify({'message': 'Job released'})
+    except Exception as e:
+        return jsonify({'message': str(e)}), 500
+
+
+@app.route('/history/job/<job_record_id>/rerun', methods=['POST'])
+@login_required
+def rerun_history_job(job_record_id):
+    if not ENABLE_JOB_HISTORY:
+        return jsonify({'message': 'Job history feature is disabled'}), 404
+    record = load_job_record(get_history_user(), job_record_id)
+    if not can_manage_record(record):
+        return jsonify({'message': 'Not authorized'}), 403
+    new_payload = rerun_job_record(record)
+    return jsonify({'message': 'Job re-submitted', 'job_record_id': new_payload.get('job_record_id')})
+
+
+@app.route('/history/workflow/<workflow_id>/cancel', methods=['POST'])
+@login_required
+def cancel_history_workflow(workflow_id):
+    if not ENABLE_JOB_HISTORY:
+        return jsonify({'message': 'Job history feature is disabled'}), 404
+    record = load_workflow_record(get_history_user(), workflow_id)
+    if not can_manage_record(record):
+        return jsonify({'message': 'Not authorized'}), 403
+    try:
+        run_control_command(['scancel'], collect_workflow_job_ids(record))
+        for step in record.get('steps', []):
+            step['status'] = 'cancelled'
+        update_record(record['history_file'], {'status': 'cancelled', 'steps': record.get('steps', [])})
+        return jsonify({'message': 'Workflow cancelled'})
+    except Exception as e:
+        return jsonify({'message': str(e)}), 500
+
+
+@app.route('/history/workflow/<workflow_id>/hold', methods=['POST'])
+@login_required
+def hold_history_workflow(workflow_id):
+    if not ENABLE_JOB_HISTORY:
+        return jsonify({'message': 'Job history feature is disabled'}), 404
+    record = load_workflow_record(get_history_user(), workflow_id)
+    if not can_manage_record(record):
+        return jsonify({'message': 'Not authorized'}), 403
+    try:
+        run_control_command(['scontrol', 'hold'], collect_workflow_job_ids(record))
+        for step in record.get('steps', []):
+            step['status'] = 'paused'
+        update_record(record['history_file'], {'status': 'paused', 'steps': record.get('steps', [])})
+        return jsonify({'message': 'Workflow held'})
+    except Exception as e:
+        return jsonify({'message': str(e)}), 500
+
+
+@app.route('/history/workflow/<workflow_id>/release', methods=['POST'])
+@login_required
+def release_history_workflow(workflow_id):
+    if not ENABLE_JOB_HISTORY:
+        return jsonify({'message': 'Job history feature is disabled'}), 404
+    record = load_workflow_record(get_history_user(), workflow_id)
+    if not can_manage_record(record):
+        return jsonify({'message': 'Not authorized'}), 403
+    try:
+        run_control_command(['scontrol', 'release'], collect_workflow_job_ids(record))
+        for step in record.get('steps', []):
+            step['status'] = 'submitted'
+        update_record(record['history_file'], {'status': 'submitted', 'steps': record.get('steps', [])})
+        return jsonify({'message': 'Workflow released'})
+    except Exception as e:
+        return jsonify({'message': str(e)}), 500
+
+
+@app.route('/history/workflow/<workflow_id>/rerun', methods=['POST'])
+@login_required
+def rerun_history_workflow(workflow_id):
+    if not ENABLE_JOB_HISTORY:
+        return jsonify({'message': 'Job history feature is disabled'}), 404
+    record = load_workflow_record(get_history_user(), workflow_id)
+    if not can_manage_record(record):
+        return jsonify({'message': 'Not authorized'}), 403
+    new_payload = rerun_workflow_record(record)
+    return jsonify({'message': 'Workflow re-submitted', 'workflow_id': new_payload.get('workflow_id')})
+
+
+@app.route('/history/workflow/<workflow_id>/steps/<step_id>/rerun', methods=['POST'])
+@login_required
+def rerun_history_workflow_step(workflow_id, step_id):
+    if not ENABLE_JOB_HISTORY:
+        return jsonify({'message': 'Job history feature is disabled'}), 404
+    record = load_workflow_record(get_history_user(), workflow_id)
+    if not can_manage_record(record):
+        return jsonify({'message': 'Not authorized'}), 403
+    new_payload = rerun_workflow_record(record, start_step_id=step_id)
+    return jsonify({'message': 'Workflow fork re-submitted', 'workflow_id': new_payload.get('workflow_id')})
+
+
 @app.route("/cancel", methods=["POST"])
+@login_required
 def cancel_job():
     data = request.get_json()
     job_id = data.get("job_id")
@@ -441,4 +774,4 @@ def cancel_job():
 
 
 if __name__ == '__main__':
-    app.run(host="0.0.0.0", port=1313, debug=True)
+    app.run(host="0.0.0.0", port=PORT, debug=True)
