@@ -93,7 +93,8 @@
 let workflow = { steps: [] };
 
 function escapeHtml(value) {
-    return String(value || "")
+    const normalizedValue = value === undefined || value === null ? "" : value;
+    return String(normalizedValue)
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
@@ -127,7 +128,7 @@ function renderWorkflowSteps() {
 
         const mutableFieldsHtml = mutableFields.map(fieldName => {
             const fieldId = fieldIdForStep(index, fieldName);
-            const value = step.extras?.[fieldName] || "";
+            const value = step.extras?.[fieldName] ?? "";
             return `
                 <div class="mt-2">
                     <label class="form-label small text-muted mb-1">${escapeHtml(fieldName)}</label>
@@ -180,6 +181,10 @@ function renderWorkflowSteps() {
             }
 
             const inputType = ["number", "integer", "float"].includes(fieldType) ? "number" : "text";
+            const minAttribute = fieldConfig.min !== undefined ? `min="${escapeHtml(fieldConfig.min)}"` : "";
+            const stepAttribute = fieldConfig.step !== undefined ? `step="${escapeHtml(fieldConfig.step)}"` : "";
+            const requiredAttribute = fieldConfig.required ? "required" : "";
+            const rangeAttribute = fieldConfig.preprocessing_z_range ? 'data-preprocessing-z-range="true"' : "";
             return `
                 <div class="mt-2">
                     <label class="form-label small text-muted mb-1">${escapeHtml(label)}</label>
@@ -189,6 +194,10 @@ function renderWorkflowSteps() {
                         data-step-index="${index}"
                         data-field-name="${escapeHtml(fieldName)}"
                         data-field-type="${escapeHtml(fieldType)}"
+                        ${minAttribute}
+                        ${stepAttribute}
+                        ${requiredAttribute}
+                        ${rangeAttribute}
                         value="${escapeHtml(value)}">
                 </div>
             `;
@@ -226,6 +235,63 @@ function fetchTemplates(selectedSlug = "") {
     });
 }
 
+function validateZRange(zStart, zEnd, context) {
+    if (!Number.isInteger(zStart) || zStart < 0) {
+        alert(`${context}: Z start must be an integer greater than or equal to 0.`);
+        return false;
+    }
+    if (!Number.isInteger(zEnd) || zEnd < -1) {
+        alert(`${context}: Z end must be -1 or a non-negative integer.`);
+        return false;
+    }
+    if (zEnd !== -1 && zEnd <= zStart) {
+        alert(`${context}: Z end must be -1 or greater than Z start.`);
+        return false;
+    }
+    return true;
+}
+
+function validateCurrentPreprocessingZRange() {
+    const zStartInput = document.querySelector("#form-container [name='z_start'][data-preprocessing-z-range='true']");
+    const zEndInput = document.querySelector("#form-container [name='z_end'][data-preprocessing-z-range='true']");
+    if (!zStartInput && !zEndInput) return true;
+    if (!zStartInput || !zEndInput) {
+        alert("Both Z start and Z end are required.");
+        return false;
+    }
+
+    if (!zStartInput.checkValidity()) {
+        zStartInput.reportValidity();
+        return false;
+    }
+    if (!zEndInput.checkValidity()) {
+        zEndInput.reportValidity();
+        return false;
+    }
+
+    return validateZRange(
+        Number(zStartInput.value),
+        Number(zEndInput.value),
+        "Pre-processing range"
+    );
+}
+
+function validateWorkflowZRanges() {
+    for (let index = 0; index < workflow.steps.length; index += 1) {
+        const step = workflow.steps[index];
+        const zStartConfig = step.editable_fields?.z_start;
+        const zEndConfig = step.editable_fields?.z_end;
+        if (!zStartConfig?.preprocessing_z_range && !zEndConfig?.preprocessing_z_range) continue;
+
+        if (!validateZRange(
+            step.extras?.z_start,
+            step.extras?.z_end,
+            `Workflow step ${index + 1}`
+        )) return false;
+    }
+    return true;
+}
+
 // Load the operation form and inject bindable dropdowns
 $("#load-operation").on("click", function () {
     const op = $("#operation").val();
@@ -241,6 +307,8 @@ $("#load-operation").on("click", function () {
 
 // Add step to workflow
 $("#add-step").on("click", function () {
+    if (!validateCurrentPreprocessingZRange()) return;
+
     const operation = $("#operation").val();
     const output = $("#output-name").val();
 
@@ -277,6 +345,12 @@ $("#add-step").on("click", function () {
                 field_type: fieldType,
                 default_value: defaultValue
             };
+            if ($(this).attr("data-preprocessing-z-range") === "true") {
+                editableFields[name].preprocessing_z_range = true;
+                editableFields[name].min = $(this).attr("min");
+                editableFields[name].step = $(this).attr("step");
+                editableFields[name].required = $(this).prop("required");
+            }
             if (fieldType === "select") {
                 editableFields[name].options = $(this).find("option").map(function () {
                     return {
@@ -310,7 +384,8 @@ $("#add-step").on("click", function () {
             if (valueToParse === "" || valueToParse === undefined) {
                 formData[name] = null;
             } else if (workflowFieldType === "integer") {
-                formData[name] = parseInt(valueToParse, 10);
+                const parsedValue = Number(valueToParse);
+                formData[name] = Number.isInteger(parsedValue) ? parsedValue : null;
             } else {
                 formData[name] = parseFloat(valueToParse);
             }
@@ -342,6 +417,8 @@ $("#add-step").on("click", function () {
 
 // Save entire workflow
 $("#submit-workflow").on("click", function () {
+    if (!validateWorkflowZRanges()) return;
+
     $.ajax({
         url: "/workflow/new",
         method: "POST",
@@ -352,11 +429,16 @@ $("#submit-workflow").on("click", function () {
             workflow.steps = [];
             renderWorkflowSteps();
             $("#input-source").html('<option value="">None</option>');
+        },
+        error: function (xhr) {
+            alert(xhr.responseJSON?.error || "Failed to save workflow.");
         }
     });
 });
 
 $("#save-template").on("click", function () {
+    if (!validateWorkflowZRanges()) return;
+
     const name = $("#template-name").val().trim();
     if (!name) {
         alert("Please enter a template name.");
@@ -512,9 +594,14 @@ $(document).on("input change", ".workflow-editable-field", function () {
 
     let value = $(this).val();
     if (["number", "integer", "float"].includes(fieldType)) {
-        value = value === ""
-            ? ""
-            : (fieldType === "integer" ? parseInt(value, 10) : parseFloat(value));
+        if (value === "") {
+            value = "";
+        } else if (fieldType === "integer") {
+            const parsedValue = Number(value);
+            value = Number.isInteger(parsedValue) ? parsedValue : "";
+        } else {
+            value = parseFloat(value);
+        }
         if (Number.isNaN(value)) {
             value = "";
         }

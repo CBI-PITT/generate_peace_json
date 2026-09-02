@@ -78,6 +78,23 @@
                 </div>
             </div>
 
+            <div class="row g-3 mb-3">
+                <div class="col-md-6">
+                    {{ form.z_start.label(class="form-label") }}
+                    {{ form.z_start(class="form-control") }}
+                    {% for error in form.z_start.errors %}
+                        <div class="invalid-feedback d-block">{{ error }}</div>
+                    {% endfor %}
+                </div>
+                <div class="col-md-6">
+                    {{ form.z_end.label(class="form-label") }}
+                    {{ form.z_end(class="form-control") }}
+                    {% for error in form.z_end.errors %}
+                        <div class="invalid-feedback d-block">{{ error }}</div>
+                    {% endfor %}
+                </div>
+            </div>
+
             <div class="mb-3">
                 <div class="form-check">
                     {{ form.save_as_float(class="form-check-input") }}

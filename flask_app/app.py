@@ -515,13 +515,64 @@ def delete_workflow_template(name):
     return True
 
 
+def validate_preprocessing_z_ranges(steps):
+    for index, step in enumerate(steps):
+        if not isinstance(step, dict):
+            raise ValueError(f'Workflow step {index + 1} must be an object')
+        operation = step.get('operation')
+        if not isinstance(operation, str):
+            raise ValueError(
+                f'Workflow step {index + 1} operation must be a string'
+            )
+        plugin = OPERATIONS.get(operation) or PLUGINS.get(operation)
+        if plugin is None or plugin.category != 'pre_processing':
+            continue
+
+        extras = step.get('extras')
+        if not isinstance(extras, dict):
+            raise ValueError(
+                f'Workflow step {index + 1} must contain an extras dictionary'
+            )
+
+        has_start = 'z_start' in extras
+        has_end = 'z_end' in extras
+        if not has_start and not has_end:
+            continue
+        if has_start != has_end:
+            raise ValueError(
+                f'Workflow step {index + 1} must include both z_start and z_end'
+            )
+
+        z_start = extras['z_start']
+        z_end = extras['z_end']
+        if type(z_start) is not int or z_start < 0:
+            raise ValueError(
+                f'Workflow step {index + 1} z_start must be an integer >= 0'
+            )
+        if type(z_end) is not int or z_end < -1:
+            raise ValueError(
+                f'Workflow step {index + 1} z_end must be -1 or an integer >= 0'
+            )
+        if z_end != -1 and z_end <= z_start:
+            raise ValueError(
+                f'Workflow step {index + 1} z_end must be greater than z_start'
+            )
+
+
 @app.route("/workflow/new", methods=["GET", "POST"])
 @login_required
 def create_workflow():
     if request.method == "POST":
-        data = request.get_json()
+        data = request.get_json(silent=True) or {}
+        steps = data.get("steps")
+        if not isinstance(steps, list):
+            return jsonify({'error': 'Workflow must include a steps list'}), 400
+        try:
+            validate_preprocessing_z_ranges(steps)
+        except ValueError as error:
+            return jsonify({'error': str(error)}), 400
         workflow = BaseWorkflow()
-        for step in data["steps"]:
+        for step in steps:
             workflow.add_step(
                 input=step["input"],
                 output=step["output"],
@@ -563,6 +614,11 @@ def save_workflow_template_route():
         return jsonify({'error': 'Template name is required'}), 400
     if not isinstance(workflow_data, dict) or not isinstance(workflow_data.get('steps'), list):
         return jsonify({'error': 'Workflow must include a steps list'}), 400
+
+    try:
+        validate_preprocessing_z_ranges(workflow_data['steps'])
+    except ValueError as error:
+        return jsonify({'error': str(error)}), 400
 
     payload = save_workflow_template(name, workflow_data)
     return jsonify({'status': 'ok', 'template': {'name': payload['name'], 'slug': secure_filename(name)}})
