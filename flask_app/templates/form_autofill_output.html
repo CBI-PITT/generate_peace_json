@@ -1,9 +1,33 @@
 {% extends "form.html" %}
 {% block scripts %}
 <script>
+let outputLookupRequest = 0;
+let automaticOutput = '';
+let outputWasManuallyChanged = false;
+
+function updateOutputField(value) {
+    $('#output').val(value);
+    const outputLabel = document.getElementById('selected-name-output');
+    const outputName = value ? value.split('/').filter(Boolean).pop() : '';
+    if (outputLabel) {
+        outputLabel.textContent = outputName ? `Selected: ${outputName}` : 'No file selected';
+    }
+}
+
 $(document).ready(function() {
+    $('#output').on('input', function() {
+        outputWasManuallyChanged = $(this).val() !== automaticOutput;
+    });
+
     $('#input').on('input', function() {
         let inputDir = $(this).val();
+        const requestId = ++outputLookupRequest;
+
+        if (!outputWasManuallyChanged && $('#output').val() === automaticOutput) {
+            automaticOutput = '';
+            updateOutputField('');
+        }
+
         if (inputDir) {
             $.ajax({
                 url: '/get_output_dir',
@@ -11,10 +35,18 @@ $(document).ready(function() {
                 contentType: 'application/json',
                 data: JSON.stringify({ input: inputDir }),
                 success: function(response) {
-                    $('#output').val(response.output);
+                    if (requestId !== outputLookupRequest || $('#input').val() !== inputDir || outputWasManuallyChanged) {
+                        return;
+                    }
+                    automaticOutput = response.output || '';
+                    updateOutputField(automaticOutput);
                 },
                 error: function() {
-                    $('#output').val('');
+                    if (requestId !== outputLookupRequest || $('#input').val() !== inputDir || outputWasManuallyChanged) {
+                        return;
+                    }
+                    automaticOutput = '';
+                    updateOutputField('');
                 }
             });
         }

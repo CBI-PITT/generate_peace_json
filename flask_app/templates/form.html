@@ -112,7 +112,10 @@ window.addEventListener("message", function(event) {
         const label = document.getElementById("selected-name-" + fieldId);
 
         if (nextBrowserPath) lastBrowserPath = nextBrowserPath;
-        if (input) input.value = selectedPath;
+        if (input) {
+            input.value = selectedPath;
+            input.dispatchEvent(new Event("input", { bubbles: true }));
+        }
         if (label && fileName) label.textContent = `Selected: ${fileName}`;
         if (browser) browser.style.display = "none";
         if (arrow) arrow.textContent = "▼";
