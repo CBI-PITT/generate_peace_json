@@ -7,3 +7,4 @@
 - 2026-08-27: Fixed workflow JSON generation so non-reader steps backfill missing `extras.output` from the input folder's `.dataset_info.json` `base_output_dir` when available.
 - 2026-08-27: Added optional Flask job/workflow history support behind `PEACE_ENABLE_JOB_HISTORY`, including submission IDs, history JSON records, Home-page `My jobs` / `My workflows` sections, SLURM-backed status display, and cancel/hold/release/rerun endpoints with workflow rerun-from-step fork support.
 - 2026-08-27: Fixed Flask history ownership so `submitted_by` stays the logged-in account, while `extras.user` still uses the path-derived execution user for `CBI_Admin` submissions and preserves existing SLURM job-name prefixes.
+- 2026-09-02: Added preprocessing-only `z_start` and `z_end` integer fields with `0`/`-1` defaults, direct-form and workflow validation, image-calculator rendering, and legacy saved-workflow compatibility for all nine preprocessing operations.

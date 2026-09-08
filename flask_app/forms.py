@@ -1,6 +1,6 @@
 from flask_wtf import FlaskForm
 from wtforms import Form, StringField, FieldList, FloatField, FormField, BooleanField, HiddenField, RadioField, IntegerField, SelectField
-from wtforms.validators import DataRequired
+from wtforms.validators import DataRequired, InputRequired, NumberRange, ValidationError
 
 
 def workflow_path_field(label, validators=None, default=None, bindable=True):
@@ -25,6 +25,41 @@ class BaseForm(FlaskForm):
     input = workflow_path_field('Input Location', validators=[DataRequired()])
     output = workflow_path_field('Output Location', validators=[DataRequired()], bindable=False)
     priority = RadioField('Priority (0=lowest 5=highest)', default='2', choices=[(str(i), str(i)) for i in range(6)])
+
+
+class PreProcessingForm(BaseForm):
+    z_start = IntegerField(
+        'Z start (inclusive)',
+        validators=[InputRequired(), NumberRange(min=0)],
+        default=0,
+        render_kw={
+            'required': True,
+            'min': 0,
+            'step': 1,
+            'data-workflow-editable': 'true',
+            'data-workflow-field-type': 'integer',
+            'data-preprocessing-z-range': 'true'
+        }
+    )
+    z_end = IntegerField(
+        'Z end (exclusive; -1 = all remaining planes)',
+        validators=[InputRequired(), NumberRange(min=-1)],
+        default=-1,
+        render_kw={
+            'required': True,
+            'min': -1,
+            'step': 1,
+            'data-workflow-editable': 'true',
+            'data-workflow-field-type': 'integer',
+            'data-preprocessing-z-range': 'true'
+        }
+    )
+
+    def validate_z_end(self, field):
+        if self.z_start.data is None or field.data is None:
+            return
+        if field.data != -1 and field.data <= self.z_start.data:
+            raise ValidationError('Z end must be -1 or greater than Z start.')
 
 
 class DeepBlinkForm(BaseForm):
@@ -53,33 +88,33 @@ class CellFinderForm(BaseForm):
 #     orientation = StringField('Orientation (three-letter string)', default='sal')
 
 
-class ContrastStretchForm(BaseForm):
+class ContrastStretchForm(PreProcessingForm):
     operation = HiddenField('Operation', validators=[DataRequired()], default='stretch_contrast')
     percentile_low = FloatField('Lower Percentile', default='1.0')
     percentile_high = FloatField('Higher Percentile', default='99.0')
 
 
-class AdaptiveHistogramEqualizationForm(BaseForm):
+class AdaptiveHistogramEqualizationForm(PreProcessingForm):
     operation = HiddenField('Operation', validators=[DataRequired()], default='adaptive_histogram_equalization')
     clip_limit = FloatField('Clip Limit', default=0.03)
 
 
-class GaussianBlurForm(BaseForm):
+class GaussianBlurForm(PreProcessingForm):
     operation = HiddenField('Operation', validators=[DataRequired()], default='gaussian_blur')
     sigma = FloatField('Sigma', default=1.0)
 
 
-class GammaCorrectionForm(BaseForm):
+class GammaCorrectionForm(PreProcessingForm):
     operation = HiddenField('Operation', validators=[DataRequired()], default='gamma_correction')
     gamma = FloatField('Gamma', default=1.0)
 
 
-class ResizeImageForm(BaseForm):
+class ResizeImageForm(PreProcessingForm):
     operation = HiddenField('Operation', validators=[DataRequired()], default='resize_image')
     scale_factor = FloatField('Scale Factor', default=1.0)
 
 
-class ImageCalculatorForm(BaseForm):
+class ImageCalculatorForm(PreProcessingForm):
     input = workflow_path_field('First Operand Folder', validators=[DataRequired()])
     operation = HiddenField('Operation', validators=[DataRequired()], default='image_calculator')
     calculator_operation = SelectField(
@@ -178,7 +213,7 @@ class CombineWithMetadataForm(BaseForm):
     metadata = FieldList(FormField(MetaFieldForm), min_entries=1)
 
 
-class DenoiseCellposeForm(BaseForm):
+class DenoiseCellposeForm(PreProcessingForm):
     operation = HiddenField('Operation', validators=[DataRequired()], default='denoise_cellpose')
     model = SelectField('Model name',
         choices=[
@@ -194,7 +229,7 @@ class DenoiseCellposeForm(BaseForm):
     diameter = IntegerField('Diameter', default=100)
 
 
-class RemoveStripesFFTForm(BaseForm):
+class RemoveStripesFFTForm(PreProcessingForm):
     operation = HiddenField('Operation', validators=[DataRequired()], default='remove_stripes_fft')
     stripe_direction = SelectField("Stripes orientation", choices=[('v', 'vertical'), ('h', 'horizontal')], default='v')
     composites_dir = workflow_path_field("Composites directory (RSCM only)", bindable=False)

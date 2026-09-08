@@ -1,10 +1,10 @@
-from wtforms import HiddenField, StringField, SubmitField, Form
+from wtforms import HiddenField
 from wtforms.validators import DataRequired
 from operations import BaseOperation
-from forms import BaseForm
+from forms import PreProcessingForm
 
 
-class RembgForm(BaseForm):
+class RembgForm(PreProcessingForm):
     operation = HiddenField('Operation', validators=[DataRequired()], default='rembg')
     # channel = StringField('Channel (number, starting with 0)', default='0')
     # resolution_level = StringField('Resolution level (number, starting with 0)', default='0')
@@ -37,4 +37,3 @@ class RembgPlugin(BaseOperation):
     #     with open(f'/h20/CBI/Iana/json/SLURM_settings_{timestamp}.json', 'w') as f:
     #         import json
     #         json.dump(json_data, f)
-

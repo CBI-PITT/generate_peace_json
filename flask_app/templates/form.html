@@ -66,6 +66,9 @@
                             {{ field(class="form-control", id=field.id) }}
                         {% endif %}
                     {% endif %}
+                    {% for error in field.errors %}
+                        <div class="invalid-feedback d-block">{{ error }}</div>
+                    {% endfor %}
                     </div>
                 {% endif %}
             {% endfor %}
