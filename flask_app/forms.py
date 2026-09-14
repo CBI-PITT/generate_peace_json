@@ -200,6 +200,20 @@ class TransformPointsForm(BaseForm):
     registration_path = workflow_path_field('Path to registration folder', validators=[DataRequired()])
 
 
+class MeanIntensityForm(BaseForm):
+    input = HiddenField()
+    output = HiddenField()
+    operation = HiddenField('Operation', validators=[DataRequired()], default='mean_intensity')
+    cells_path = workflow_path_field('Cells CSV path', validators=[DataRequired()])
+    image_path = workflow_path_field('Raw image path (.ims, .ome.zarr, or reader tiff series folder)', validators=[DataRequired()])
+    radius = FloatField(
+        'Sphere radius (um)',
+        validators=[DataRequired()],
+        default=5,
+        render_kw={'data-workflow-editable': 'true', 'data-workflow-field-type': 'number'}
+    )
+
+
 class MetaFieldForm(Form):
     key = StringField('Key', validators=[DataRequired()])
     value = StringField('Value', validators=[DataRequired()])
