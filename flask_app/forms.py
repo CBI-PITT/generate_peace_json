@@ -205,7 +205,6 @@ class MeanIntensityForm(BaseForm):
     output = HiddenField()
     operation = HiddenField('Operation', validators=[DataRequired()], default='mean_intensity')
     cells_path = workflow_path_field('Cells CSV path', validators=[DataRequired()])
-    image_path = workflow_path_field('Raw image path (.ims, .ome.zarr, or reader tiff series folder)', validators=[DataRequired()])
     radius = FloatField(
         'Sphere radius (um)',
         validators=[DataRequired()],

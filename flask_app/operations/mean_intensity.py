@@ -6,7 +6,7 @@ from utils.users import get_user
 class MeanIntensity(BaseOperation):
     name = "mean_intensity"
     category = "post_processing"
-    description = "Compute mean intensity in a sphere of a given radius around each detected cell position and append it to the CSV"
+    description = "Compute mean intensity in a sphere around each detected cell position using the raw image resolved from provenance"
 
     def get_form(self):
         return MeanIntensityForm
