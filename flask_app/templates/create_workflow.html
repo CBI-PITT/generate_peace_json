@@ -31,12 +31,18 @@
             </div>
         </div>
 
-        <!-- Operation Selection -->
+        <!-- Workflow Steps -->
         <div class="card mb-4">
-            <div class="card-body">
-                <div class="row g-3 align-items-center">
-                    <div class="col-md-5">
-                        <label for="operation" class="form-label">Select Operation</label>
+            <div class="card-header">
+                <h5 class="mb-0">Workflow Steps</h5>
+            </div>
+            <ul class="list-group list-group-flush" id="workflow-steps"></ul>
+            <div class="card-body" id="pending-step">
+                <div class="row g-2 align-items-center">
+                    <div class="col-auto">
+                        <label for="operation" class="form-label mb-0"><strong id="pending-step-label">Step 1:</strong></label>
+                    </div>
+                    <div class="col">
                         <select id="operation" class="form-select">
                           <option value="">-- Choose an operation --</option>
                           {% for category, operations in available_operations.items() %}
@@ -48,42 +54,29 @@
                           {% endfor %}
                         </select>
                     </div>
-                    <div class="col-md-3 align-self-end">
-                        <button id="load-operation" class="btn btn-primary">Load Settings</button>
+                </div>
+
+                <!-- Dynamic Form -->
+                <div id="form-container"></div>
+
+                <!-- Additional Controls -->
+                <div id="operation-controls" style="display: none;">
+                    <div class="row g-3">
+                        <div class="col-md-10">
+                            <label for="output-name" class="form-label">Output Name</label>
+                            <input type="text" id="output-name" class="form-control" placeholder="e.g., processed_data">
+                        </div>
+                        <div class="col-md-2 d-grid align-items-end">
+                            <button id="add-step" class="btn btn-success">Add Step</button>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
-
-        <!-- Dynamic Form -->
-        <div id="form-container" class="mb-4"></div>
-
-        <!-- Additional Controls -->
-        <div id="operation-controls" class="card mb-4" style="display: none;">
-            <div class="card-body">
-                <div class="row g-3">
-                    <div class="col-md-10">
-                        <label for="output-name" class="form-label">Output Name</label>
-                        <input type="text" id="output-name" class="form-control" placeholder="e.g., processed_data">
-                    </div>
-                    <div class="col-md-2 d-grid align-items-end">
-                        <button id="add-step" class="btn btn-success mt-3">Add Step</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Workflow Preview -->
-        <div class="card mb-4">
-            <div class="card-header">
-                <h5 class="mb-0">Workflow Steps</h5>
-            </div>
-            <ul class="list-group list-group-flush" id="workflow-steps"></ul>
         </div>
 
         <!-- Submit -->
         <div class="d-grid">
-            <button id="submit-workflow" class="btn btn-dark btn-lg">Save Workflow</button>
+            <button id="submit-workflow" class="btn btn-dark btn-lg" disabled>Run Workflow</button>
         </div>
     </div>
 {% endblock %}
@@ -215,10 +208,19 @@ function renderWorkflowSteps() {
                         ${editableFieldsHtml}
                         ${mutableFieldsHtml}
                     </div>
+                    <button type="button" class="btn btn-outline-danger btn-sm remove-step" data-step-index="${index}" title="Remove step"><span aria-hidden="true">&times;</span></button>
                 </div>
             </li>
         `);
     });
+
+    // Sync the pending step row and submit state
+    $("#pending-step-label").text(`Step ${workflow.steps.length + 1}:`);
+    $("#operation").val("");
+    $("#form-container").empty();
+    $("#operation-controls").hide();
+    $("#output-name").val("");
+    $("#submit-workflow").prop("disabled", workflow.steps.length === 0);
 }
 
 function fetchTemplates(selectedSlug = "") {
@@ -292,10 +294,15 @@ function validateWorkflowZRanges() {
     return true;
 }
 
-// Load the operation form and inject bindable dropdowns
-$("#load-operation").on("click", function () {
-    const op = $("#operation").val();
-    if (!op) return;
+// Auto-load the operation form and inject bindable dropdowns when an operation is selected
+$("#operation").on("change", function () {
+    const op = $(this).val();
+    if (!op) {
+        $("#form-container").empty();
+        $("#operation-controls").hide();
+        $("#output-name").val("");
+        return;
+    }
 
     $.post("/workflow/operation_form", { operation: op }, function (data) {
         $("#form-container").html(`<div class="card"><div class="card-body">${data.form_html}</div></div>`);
@@ -408,11 +415,31 @@ $("#add-step").on("click", function () {
     });
 
     renderWorkflowSteps();
+});
 
-    // Reset
-    $("#form-container").empty();
-    $("#operation-controls").hide();
-    $("#output-name").val("");
+// Remove a committed step and strip input bindings that pointed to its output
+$(document).on("click", ".remove-step", function () {
+    const stepIndex = parseInt($(this).data("step-index"), 10);
+    if (Number.isNaN(stepIndex) || !workflow.steps[stepIndex]) return;
+
+    const removedOutput = workflow.steps[stepIndex].output;
+    workflow.steps.splice(stepIndex, 1);
+
+    if (removedOutput) {
+        const outputStillProduced = workflow.steps.some(step => step.output === removedOutput);
+        if (!outputStillProduced) {
+            workflow.steps.forEach(step => {
+                if (!step.input) return;
+                Object.keys(step.input).forEach(fieldName => {
+                    if (step.input[fieldName] === removedOutput) {
+                        delete step.input[fieldName];
+                    }
+                });
+            });
+        }
+    }
+
+    renderWorkflowSteps();
 });
 
 // Save entire workflow
@@ -613,6 +640,7 @@ $(document).on("input change", ".workflow-editable-field", function () {
 $(document).ready(function () {
     fetchTemplates();
     setupBrowseButtons();
+    renderWorkflowSteps();
 });
 </script>
 {% endblock %}
