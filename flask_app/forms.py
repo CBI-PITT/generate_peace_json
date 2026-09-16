@@ -200,6 +200,13 @@ class TransformPointsForm(BaseForm):
     registration_path = workflow_path_field('Path to registration folder', validators=[DataRequired()])
 
 
+class NearestNeighborForm(BaseForm):
+    input = HiddenField()
+    output = HiddenField()
+    operation = HiddenField('Operation', validators=[DataRequired()], default='nearest_neighbor')
+    cells_path = workflow_path_field('Cells CSV path', validators=[DataRequired()])
+
+
 class MetaFieldForm(Form):
     key = StringField('Key', validators=[DataRequired()])
     value = StringField('Value', validators=[DataRequired()])
