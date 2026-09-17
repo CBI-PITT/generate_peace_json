@@ -200,6 +200,19 @@ class TransformPointsForm(BaseForm):
     registration_path = workflow_path_field('Path to registration folder', validators=[DataRequired()])
 
 
+class MeanIntensityForm(BaseForm):
+    input = HiddenField()
+    output = HiddenField()
+    operation = HiddenField('Operation', validators=[DataRequired()], default='mean_intensity')
+    cells_path = workflow_path_field('Cells CSV path', validators=[DataRequired()])
+    radius = FloatField(
+        'Sphere radius (um)',
+        validators=[DataRequired()],
+        default=5,
+        render_kw={'data-workflow-editable': 'true', 'data-workflow-field-type': 'number'}
+    )
+
+
 class NearestNeighborForm(BaseForm):
     input = HiddenField()
     output = HiddenField()
