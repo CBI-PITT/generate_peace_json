@@ -82,6 +82,8 @@
 {% endblock %}
 
 {% block scripts %}
+{% include "browser_modal.html" %}
+<script src="{{ url_for('static', filename='js/browser_picker.js') }}"></script>
 <script>
 let workflow = { steps: [] };
 
@@ -97,15 +99,6 @@ function escapeHtml(value) {
 
 function fieldIdForStep(stepIndex, fieldName) {
     return `workflow-step-${stepIndex}-${fieldName.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
-}
-
-let lastBrowserPath = "/browser/dir/";
-
-function updateBrowserLocation(fieldId) {
-    const iframe = document.querySelector(`#browser-${fieldId} iframe`);
-    if (iframe && lastBrowserPath && iframe.getAttribute("src") !== lastBrowserPath) {
-        iframe.setAttribute("src", lastBrowserPath);
-    }
 }
 
 function renderWorkflowSteps() {
@@ -128,16 +121,8 @@ function renderWorkflowSteps() {
                     <input type="hidden" id="${escapeHtml(fieldId)}" value="${escapeHtml(value)}" data-step-index="${index}" data-field-name="${escapeHtml(fieldName)}">
                     <div id="selected-name-${escapeHtml(fieldId)}" class="form-text text-muted fst-italic mb-2">${value ? `Selected: ${escapeHtml(value)}` : 'No file selected'}</div>
                     <button type="button" class="btn btn-outline-secondary btn-sm browse-btn" data-target="${escapeHtml(fieldId)}">
-                        Browse <span class="arrow">▼</span>
+                        Browse
                     </button>
-                    <div class="file-browser-container mt-2" id="browser-${escapeHtml(fieldId)}" style="display: none; border: 1px solid #ccc; padding: 10px;">
-                        <iframe name="iframe-input-${escapeHtml(fieldId)}"
-                            src="/browser/dir/"
-                            width="100%" height="300px"
-                            frameborder="0"
-                            data-field-id="${escapeHtml(fieldId)}">
-                        </iframe>
-                    </div>
                 </div>
             `;
         }).join("");
@@ -308,7 +293,6 @@ $("#operation").on("change", function () {
         $("#form-container").html(`<div class="card"><div class="card-body">${data.form_html}</div></div>`);
         $("#operation-controls").show();
         addOutputBindings();  // <-- insert dropdowns for binding previous outputs
-        setupBrowseButtons();  // <-- setup "Browse" buttons & iframe toggle
     });
 });
 
@@ -573,46 +557,6 @@ function addOutputBindings() {
     });
 }
 
-function setupBrowseButtons() {
-    $(document).off("click.workflowBrowse", ".browse-btn");
-    $(document).on("click.workflowBrowse", ".browse-btn", function () {
-        const fieldId = $(this).data("target");
-        const browser = $("#browser-" + fieldId);
-        const arrow = $(this).find(".arrow");
-
-        const isVisible = browser.is(":visible");
-        if (!isVisible) {
-            updateBrowserLocation(fieldId);
-        }
-        browser.toggle();
-        arrow.text(isVisible ? "▼" : "▲");
-    });
-
-}
-window.addEventListener("message", function(event) {
-    const { fieldId, selectedPath, fileName, nextBrowserPath } = event.data;
-    if (fieldId && selectedPath) {
-        const input = document.getElementById(fieldId);
-        const browser = document.getElementById("browser-" + fieldId);
-        const button = document.querySelector(`.browse-btn[data-target="${fieldId}"]`);
-        const arrow = button?.querySelector(".arrow");
-        const label = document.getElementById("selected-name-" + fieldId);
-
-        if (nextBrowserPath) lastBrowserPath = nextBrowserPath;
-        if (input) input.value = selectedPath;
-        if (input?.dataset.stepIndex !== undefined && input?.dataset.fieldName) {
-            const stepIndex = parseInt(input.dataset.stepIndex, 10);
-            const fieldName = input.dataset.fieldName;
-            if (!Number.isNaN(stepIndex) && workflow.steps[stepIndex]) {
-                workflow.steps[stepIndex].extras[fieldName] = selectedPath;
-            }
-        }
-        if (label) label.textContent = `Selected: ${selectedPath}`;
-        if (browser) browser.style.display = "none";
-        if (arrow) arrow.textContent = "▼";
-    }
-});
-
 $(document).on("input change", ".workflow-editable-field", function () {
     const stepIndex = parseInt($(this).data("step-index"), 10);
     const fieldName = $(this).data("field-name");
@@ -639,7 +583,6 @@ $(document).on("input change", ".workflow-editable-field", function () {
 
 $(document).ready(function () {
     fetchTemplates();
-    setupBrowseButtons();
     renderWorkflowSteps();
 });
 </script>
