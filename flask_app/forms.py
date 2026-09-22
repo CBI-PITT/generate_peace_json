@@ -255,6 +255,10 @@ class RemoveStripesFFTForm(PreProcessingForm):
     composites_dir = workflow_path_field("Composites directory (RSCM only)", bindable=False)
 
 
+class RemoveBackgroundForm(PreProcessingForm):
+    operation = HiddenField('Operation', validators=[DataRequired()], default='remove_background')
+
+
 class SpotiflowForm(BaseForm):
     operation = HiddenField('Operation', validators=[DataRequired()], default='spotiflow')
     model = SelectField('Model name',
