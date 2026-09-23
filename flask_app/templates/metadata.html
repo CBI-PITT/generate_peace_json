@@ -1,65 +1,83 @@
 {% extends "base.html" %}
 
-{% block title %}{{ operation.capitalize() }} Form{% endblock %}
+{% block title %}{{ operation.capitalize() }}{% endblock %}
 
 {% block content %}
-<div class="card">
-    <div class="card-header">
-        <h2 class="card-title">{{ operation.capitalize() }} Settings</h2>
+<div class="peace-narrow">
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+        <a class="peace-back-link" href="{{ request.referrer or url_for('operations_catalog') }}">
+            <i class="bi bi-arrow-left"></i>Back
+        </a>
     </div>
-    <div class="card-body">
+
+    <div class="card peace-card peace-form-card">
+        <div class="card-header peace-card-header d-flex align-items-center gap-2">
+            <span class="peace-op-icon"><i class="bi bi-tags" aria-hidden="true"></i></span>
+            <div class="min-w-0">
+                <div class="peace-modal-kicker">Operation</div>
+                <h2 class="h6 mb-0 text-truncate">{{ operation.capitalize() }} Settings</h2>
+            </div>
+        </div>
         <form method="post" class="needs-validation" novalidate>
-            {{ form.hidden_tag() }}
-            {% for field in form %}
-                {% if field.widget.input_type != 'hidden' %}
-                    <div class="mb-3">
-                    {% if field.type == 'BooleanField' %}
-                        <div class="form-check">
-                            {{ field(class="form-check-input") }}
-                            {{ field.label(class="form-check-label") }}
+            <div class="card-body peace-card-body">
+                {{ form.hidden_tag() }}
+                {% for field in form %}
+                    {% if field.widget.input_type != 'hidden' %}
+                        <div class="mb-3">
+                        {% if field.type == 'BooleanField' %}
+                            <div class="form-check">
+                                {{ field(class="form-check-input") }}
+                                {{ field.label(class="form-check-label") }}
+                            </div>
+                        {% elif field.type == 'RadioField' %}
+                            <label class="form-label">{{ field.label.text }}</label>
+                            <div class="d-flex gap-3">
+                                {% for subfield in field %}
+                                    <div class="form-check form-check-inline">
+                                        {{ subfield(class="form-check-input") }}
+                                        {{ subfield.label(class="form-check-label") }}
+                                    </div>
+                                {% endfor %}
+                            </div>
+                        {% elif field.type == 'FieldList' %}
+                            <div></div>
+                        {% else %}
+                            {{ field.label(class="form-label") }}
+                            {{ field(class="form-control") }}
+                        {% endif %}
                         </div>
-                    {% elif field.type == 'RadioField' %}
-                        <label class="form-label">{{ field.label.text }}</label>
-                        <div class="d-flex gap-3">
-                            {% for subfield in field %}
-                                <div class="form-check form-check-inline">
-                                    {{ subfield(class="form-check-input") }}
-                                    {{ subfield.label(class="form-check-label") }}
+                    {% endif %}
+                {% endfor %}
+
+                <label class="form-label">Metadata</label>
+                <div id="metadata-container">
+                    {% for subform in form.metadata %}
+                        <div class="mb-3 d-flex gap-2 align-items-end metadata-pair">
+                            {% for subfield in subform %}
+                                <div>
+                                    {{ subfield.label(class="form-label") }}
+                                    {{ subfield(class="form-control") }}
                                 </div>
                             {% endfor %}
+                            {% if not loop.first %}
+                                <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeMetadata(this)">Remove</button>
+                            {% endif %}
                         </div>
-                    {% elif field.type == 'FieldList' %}
-                        <div></div>
-                    {% else %}
-                        {{ field.label(class="form-label") }}
-                        {{ field(class="form-control") }}
-                    {% endif %}
-                    </div>
-                {% endif %}
-            {% endfor %}
-            <label class="form-label">Metadata</label>
-            <div id="metadata-container">
-                {% for subform in form.metadata %}
-                    <div class="mb-3 d-flex gap-2 align-items-end metadata-pair">
-                        {% for subfield in subform %}
-                            <div>
-                                {{ subfield.label(class="form-label") }}
-                                {{ subfield(class="form-control") }}
-                            </div>
-                        {% endfor %}
-                        {% if not loop.first %}
-                            <button type="button" class="btn btn-danger btn-sm" onclick="removeMetadata(this)">Remove</button>
-                        {% endif %}
-                    </div>
-                {% endfor %}
+                    {% endfor %}
+                </div>
+
+                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="addMetadata()"><i class="bi bi-plus-lg me-1"></i>Add More Metadata</button>
             </div>
-
-            <button type="button" class="btn btn-secondary" onclick="addMetadata()">Add More Metadata</button>
-
-            <button type="submit" class="btn btn-success">Submit</button>
+            <div class="card-footer peace-card-footer d-flex justify-content-end gap-2">
+                <a href="{{ request.referrer or url_for('operations_catalog') }}" class="btn btn-outline-secondary">Cancel</a>
+                <button type="submit" class="btn btn-primary"><i class="bi bi-check2 me-1"></i>Submit</button>
+            </div>
         </form>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
 <script>
     function addMetadata() {
         const container = document.getElementById("metadata-container");
@@ -74,7 +92,7 @@
                     <label for="metadata-${index}-value" class="form-label">Value</label>
                     <input class="form-control" id="metadata-${index}-value" name="metadata-${index}-value" type="text">
                 </div>
-                <button type="button" class="btn btn-danger btn-sm" onclick="removeMetadata(this)">Remove</button>
+                <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeMetadata(this)">Remove</button>
             </div>
         `;
         container.insertAdjacentHTML('beforeend', html);

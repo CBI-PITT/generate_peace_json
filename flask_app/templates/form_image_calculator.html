@@ -1,96 +1,104 @@
 {% extends "base.html" %}
 
-{% block title %}{{ operation.capitalize() }} Form{% endblock %}
+{% block title %}{{ operation.capitalize() }}{% endblock %}
 
 {% block content %}
-<div class="card">
-    <div class="card-header">
-        <h2 class="card-title">{{ operation.capitalize() }} Settings</h2>
+<div class="peace-narrow">
+    <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+        <a class="peace-back-link" href="{{ request.referrer or url_for('operations_catalog') }}">
+            <i class="bi bi-arrow-left"></i>Back
+        </a>
     </div>
-    <div class="card-body">
-        <form method="post" class="needs-validation" novalidate>
-            {{ form.hidden_tag() }}
 
-            <div class="mb-3">
-                {{ form.input.label(class="form-label") }}
-                {{ form.input(type="hidden", id=form.input.id) }}
-                <div id="selected-name-{{ form.input.id }}" class="form-text text-muted fst-italic">No file selected</div>
-                <div class="mt-2">
-                    <button type="button" class="btn btn-outline-secondary browse-btn" data-target="{{ form.input.id }}">
-                        Browse
+    <div class="card peace-card peace-form-card">
+        <div class="card-header peace-card-header d-flex align-items-center gap-2">
+            <span class="peace-op-icon"><i class="bi bi-calculator" aria-hidden="true"></i></span>
+            <div class="min-w-0">
+                <div class="peace-modal-kicker">Operation</div>
+                <h2 class="h6 mb-0 text-truncate">{{ operation.capitalize() }} Settings</h2>
+            </div>
+        </div>
+        <form method="post" class="needs-validation" novalidate>
+            <div class="card-body peace-card-body">
+                {{ form.hidden_tag() }}
+
+                <div class="mb-3">
+                    {{ form.input.label(class="form-label") }}
+                    {{ form.input(type="hidden", id=form.input.id) }}
+                    <div id="selected-name-{{ form.input.id }}" class="peace-browse-hint mb-2">No file selected</div>
+                    <button type="button" class="btn btn-outline-secondary peace-action-btn browse-btn" data-target="{{ form.input.id }}">
+                        <i class="bi bi-folder2-open"></i>Browse
                     </button>
                 </div>
-            </div>
 
-            <div class="mb-3">
-                {{ form.calculator_operation.label(class="form-label") }}
-                {{ form.calculator_operation(class="form-select") }}
-            </div>
+                <div class="mb-3">
+                    {{ form.calculator_operation.label(class="form-label") }}
+                    {{ form.calculator_operation(class="form-select") }}
+                </div>
 
-            <div class="mb-3">
-                {{ form.input2.label(class="form-label") }}
-                {{ form.input2(type="hidden", id=form.input2.id) }}
-                <div class="d-flex gap-2 align-items-start">
-                    <div class="flex-grow-1">
-                        <input type="text" class="form-control" id="{{ form.input2.id }}-display" placeholder="Folder path or numeric value">
-                    </div>
-                    <div>
-                        <button type="button" class="btn btn-outline-secondary browse-btn" data-target="{{ form.input2.id }}">
-                            Browse
+                <div class="mb-3">
+                    {{ form.input2.label(class="form-label") }}
+                    {{ form.input2(type="hidden", id=form.input2.id) }}
+                    <div class="d-flex gap-2 align-items-start">
+                        <div class="flex-grow-1">
+                            <input type="text" class="form-control" id="{{ form.input2.id }}-display" placeholder="Folder path or numeric value">
+                        </div>
+                        <button type="button" class="btn btn-outline-secondary peace-action-btn browse-btn" data-target="{{ form.input2.id }}">
+                            <i class="bi bi-folder2-open"></i>Browse
                         </button>
                     </div>
+                    <div id="selected-name-{{ form.input2.id }}" class="peace-browse-hint mt-2">No file selected</div>
                 </div>
-                <div id="selected-name-{{ form.input2.id }}" class="form-text text-muted fst-italic">No file selected</div>
-            </div>
 
-            <div class="mb-3">
-                {{ form.output.label(class="form-label") }}
-                {{ form.output(type="hidden", id=form.output.id) }}
-                <div id="selected-name-{{ form.output.id }}" class="form-text text-muted fst-italic">No file selected</div>
-                <div class="mt-2">
-                    <button type="button" class="btn btn-outline-secondary browse-btn" data-target="{{ form.output.id }}">
-                        Browse
+                <div class="mb-3">
+                    {{ form.output.label(class="form-label") }}
+                    {{ form.output(type="hidden", id=form.output.id) }}
+                    <div id="selected-name-{{ form.output.id }}" class="peace-browse-hint mb-2">No file selected</div>
+                    <button type="button" class="btn btn-outline-secondary peace-action-btn browse-btn" data-target="{{ form.output.id }}">
+                        <i class="bi bi-folder2-open"></i>Browse
                     </button>
                 </div>
-            </div>
 
-            <div class="row g-3 mb-3">
-                <div class="col-md-6">
-                    {{ form.z_start.label(class="form-label") }}
-                    {{ form.z_start(class="form-control") }}
-                    {% for error in form.z_start.errors %}
-                        <div class="invalid-feedback d-block">{{ error }}</div>
-                    {% endfor %}
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        {{ form.z_start.label(class="form-label") }}
+                        {{ form.z_start(class="form-control") }}
+                        {% for error in form.z_start.errors %}
+                            <div class="invalid-feedback d-block">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                    <div class="col-md-6">
+                        {{ form.z_end.label(class="form-label") }}
+                        {{ form.z_end(class="form-control") }}
+                        {% for error in form.z_end.errors %}
+                            <div class="invalid-feedback d-block">{{ error }}</div>
+                        {% endfor %}
+                    </div>
                 </div>
-                <div class="col-md-6">
-                    {{ form.z_end.label(class="form-label") }}
-                    {{ form.z_end(class="form-control") }}
-                    {% for error in form.z_end.errors %}
-                        <div class="invalid-feedback d-block">{{ error }}</div>
-                    {% endfor %}
+
+                <div class="mb-3">
+                    <div class="form-check">
+                        {{ form.save_as_float(class="form-check-input") }}
+                        {{ form.save_as_float.label(class="form-check-label") }}
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">{{ form.priority.label.text }}</label>
+                    <div class="d-flex gap-3">
+                        {% for subfield in form.priority %}
+                            <div class="form-check form-check-inline">
+                                {{ subfield(class="form-check-input") }}
+                                {{ subfield.label(class="form-check-label") }}
+                            </div>
+                        {% endfor %}
+                    </div>
                 </div>
             </div>
-
-            <div class="mb-3">
-                <div class="form-check">
-                    {{ form.save_as_float(class="form-check-input") }}
-                    {{ form.save_as_float.label(class="form-check-label") }}
-                </div>
+            <div class="card-footer peace-card-footer d-flex justify-content-end gap-2">
+                <a href="{{ request.referrer or url_for('operations_catalog') }}" class="btn btn-outline-secondary">Cancel</a>
+                <button type="submit" class="btn btn-primary"><i class="bi bi-check2 me-1"></i>Submit</button>
             </div>
-
-            <div class="mb-3">
-                <label class="form-label">{{ form.priority.label.text }}</label>
-                <div class="d-flex gap-3">
-                    {% for subfield in form.priority %}
-                        <div class="form-check form-check-inline">
-                            {{ subfield(class="form-check-input") }}
-                            {{ subfield.label(class="form-check-label") }}
-                        </div>
-                    {% endfor %}
-                </div>
-            </div>
-
-            <button type="submit" class="btn btn-success">Submit</button>
         </form>
     </div>
 </div>

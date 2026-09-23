@@ -301,30 +301,49 @@ def index():
     )
 
 
+def build_catalog():
+    """
+    Group every reader and operation plugin into catalog sections for the
+    unified operations page.
+    """
+    all_operations = {}
+    all_operations.update(OPERATIONS)
+    all_operations.update(PLUGINS)
+    groups = []
+    if READER_PLUGINS:
+        groups.append({
+            'key': 'readers',
+            'label': 'Read Data',
+            'operations': [(name, READER_PLUGINS[name].description) for name in READER_PLUGINS],
+        })
+    for category in dict.fromkeys(get_op_categories(all_operations.keys())):
+        category_ops = [x for x in all_operations.keys() if all_operations[x].category == category]
+        groups.append({
+            'key': category,
+            'label': category.replace('_', ' ').title(),
+            'operations': [(op, all_operations[op].description) for op in category_ops],
+        })
+    return groups
+
+
+@app.route('/operations')
+def operations_catalog():
+    return render_template('operations.html', groups=build_catalog(), active_category=None)
+
+
 @app.route('/categories')
 def categories():
-    operations = list(OPERATIONS.keys())
-    operations.extend(PLUGINS.keys())
-    categories = list(set(get_op_categories(operations)))
-    return render_template('categories.html', categories=categories)
+    return redirect(url_for('operations_catalog'))
 
 
 @app.route('/analyze/<category>')
 def analyze(category):
-    # operations = list(OPERATIONS.keys())
-    # operations.extend(PLUGINS.keys())
-    operations = OPERATIONS.copy()
-    operations.update(PLUGINS.copy())
-    operations = [x for x in operations.keys() if operations[x].category == category]
-    descriptions = get_op_descriptions(operations)
-    return render_template('operations.html', operations=operations, descriptions=descriptions)
+    return render_template('operations.html', groups=build_catalog(), active_category=category)
 
 
 @app.route('/read')
 def read():
-    operations = list(READER_PLUGINS.keys())
-    descriptions = get_op_descriptions(operations)
-    return render_template('operations.html', operations=operations, descriptions=descriptions)
+    return render_template('operations.html', groups=build_catalog(), active_category='readers')
 
 
 @app.route('/operation/<operation>', methods=['GET', 'POST'])

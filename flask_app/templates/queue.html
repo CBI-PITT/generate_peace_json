@@ -2,41 +2,57 @@
 
 {% block title %}Queue{% endblock %}
 
+{% set state_badge = {
+    'R': 'success',
+    'CG': 'primary',
+    'PD': 'warning',
+    'CD': 'secondary',
+    'F': 'danger',
+    'S': 'info',
+    'ST': 'info'
+} %}
+
 {% block styles %}
 <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
 {% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-<h2 class="mb-4">Current SLURM Queue</h2>
+<div class="peace-page-header">
+    <div>
+        <h1 class="peace-page-title">SLURM Queue</h1>
+        <p class="peace-page-subtitle">Currently queued and running jobs. Cancel jobs you own with the trash button.</p>
+    </div>
+</div>
+
+<div class="card peace-card peace-table-wrapper">
     <div class="table-responsive">
-        <table id="slurm-table" class="table table-striped table-bordered">
-            <thead class="table-dark">
+        <table id="slurm-table" class="table peace-table align-middle mb-0">
+            <thead>
                 <tr>
-                    <th>Job ID</th>
-                    <th>User</th>
-                    <th>Job Name</th>
-                    <th>Partition</th>
-                    <th>State</th>
-                    <th>Time</th>
-                    <th>Priority</th>
-                    <th>Action</th>
+                    <th scope="col">Job ID</th>
+                    <th scope="col">User</th>
+                    <th scope="col">Job Name</th>
+                    <th scope="col">Partition</th>
+                    <th scope="col">State</th>
+                    <th scope="col">Time</th>
+                    <th scope="col">Nodes</th>
+                    <th scope="col">Action</th>
                 </tr>
             </thead>
             <tbody>
                 {% for job in queue %}
                 <tr data-job-id="{{ job['Job ID'] }}">
-                    <td>{{ job["Job ID"] }}</td>
+                    <td class="font-monospace small">{{ job["Job ID"] }}</td>
                     <td>{{ job["User"] }}</td>
-                    <td>{{ job["Job Name"] }}</td>
-                    <td>{{ job["Partition"] }}</td>
-                    <td>{{ job["State"] }}</td>
-                    <td>{{ job["Time"] }}</td>
-                    <td>{{ job["Nodes"] }}</td>
+                    <td><span class="fw-medium">{{ job["Job Name"] }}</span></td>
+                    <td class="peace-cell-muted">{{ job["Partition"] }}</td>
+                    <td><span class="badge rounded-pill text-bg-{{ state_badge.get(job["State"], 'secondary') }} peace-status-badge">{{ job["State"] }}</span></td>
+                    <td class="peace-cell-muted">{{ job["Time"] }}</td>
+                    <td class="peace-cell-muted">{{ job["Nodes"] }}</td>
                     <td>
                       {% if current_user.get_id() and (job["Job Name"].startswith(current_user.get_id()) or current_user.get_id() == "CBI_Admin") %}
-                          <button class="btn p-0 border-0 cancel-job" title="Cancel Job">
-                            <i class="fas fa-trash text-secondary"></i>
+                          <button class="peace-icon-btn peace-danger cancel-job" title="Cancel Job" aria-label="Cancel Job {{ job['Job ID'] }}">
+                            <i class="bi bi-trash3"></i>
                           </button>
                       {% endif %}
                     </td>
@@ -48,7 +64,6 @@
 </div>
 {% endblock %}
 {% block scripts %}
-<!-- <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>-->
   <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
   <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
   <script>

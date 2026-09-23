@@ -1,32 +1,123 @@
 {% extends "base.html" %}
 
-{% block title %}Home{% endblock %}
-{% block styles %}
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
-<!--<link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">-->
-{% endblock %}
+{% block title %}Operations{% endblock %}
+
+{% set group_icons = {
+    'readers': 'bi-collection',
+    'pre_processing': 'bi-sliders',
+    'post_processing': 'bi-gear'
+} %}
 
 {% block content %}
-<div class="text-center">
-    <h1 class="my-4">Select an Operation</h1>
-    <div class="container d-flex justify-content-center" style="min-height: 100vh;">
-    <ul class="list-group">
-        {% for operation in operations %}
-        <li class="list-group-item list-group-item-action" data-toggle="collapse" data-target="#collapseDescription{{ loop.index }}" aria-expanded="false" aria-controls="collapseDescription">
-            <div class="d-flex align-items-center">
-                <i class="fas fa-chevron-down mr-2 chevron-icon"></i>
-<!--                <div class="flex-grow-1"></div>-->
-                <a href="{{ url_for('operation_form', operation=operation) }}" class="btn btn-primary btn-centered">
-                    {{ operation }}
-                </a>
-            </div>
-            <div id="collapseDescription{{ loop.index }}" class="collapse mt-2">
-                <p>{{ descriptions[loop.index-1] }}</p>
-            </div>
-        </li>
+<div class="peace-page-header">
+    <div>
+        <h1 class="peace-page-title">Operations</h1>
+        <p class="peace-page-subtitle">Pick an operation to configure and submit. Use the filters or search to find what you need.</p>
+    </div>
+</div>
+
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
+    <div class="d-flex flex-wrap align-items-center gap-2" id="catalog-chips">
+        <button type="button" class="peace-chip active" data-filter="all"><i class="bi bi-grid"></i>All</button>
+        {% for group in groups %}
+        <button type="button" class="peace-chip" data-filter="{{ group.key }}">
+            <i class="bi {{ group_icons.get(group.key, 'bi-list-ul') }}"></i>{{ group.label }}
+        </button>
         {% endfor %}
-    </ul>
+    </div>
+    <div class="position-relative">
+        <i class="bi bi-search position-absolute top-50 start-0 translate-middle-y ms-3 text-muted"></i>
+        <input type="search" id="catalog-search" class="peace-search-input ps-5" placeholder="Search operations" aria-label="Search operations">
+    </div>
+</div>
+
+<div id="catalog-groups">
+    {% for group in groups %}
+    <section data-category-group="{{ group.key }}">
+        <h2 class="peace-group-title">
+            <i class="bi {{ group_icons.get(group.key, 'bi-list-ul') }} me-1"></i>{{ group.label }}
+        </h2>
+        <div class="d-flex flex-column gap-2">
+            {% for op_name, op_description in group.operations %}
+            <div class="peace-op-card" data-op-name="{{ op_name }}" data-op-desc="{{ op_description or '' }}">
+                <span class="peace-op-icon"><i class="bi {{ group_icons.get(group.key, 'bi-list-ul') }}" aria-hidden="true"></i></span>
+                <div class="flex-grow-1 min-w-0">
+                    <a class="peace-op-link" href="{{ url_for('operation_form', operation=op_name) }}">{{ op_name }}</a>
+                    {% if op_description %}
+                    <p class="peace-op-desc mb-0" data-op-full="{{ op_description }}" title="{{ op_description }}">{{ op_description }}</p>
+                    {% endif %}
+                </div>
+                <i class="bi bi-box-arrow-in-right text-muted" aria-hidden="true"></i>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+    {% endfor %}
+</div>
+
+<div class="card peace-card d-none" id="catalog-empty">
+    <div class="card-body peace-card-body text-center text-muted py-5">
+        <i class="bi bi-search me-1"></i>No operations match your search.
     </div>
 </div>
 {% endblock %}
 
+{% block scripts %}
+<script>
+(function () {
+    const chips = document.querySelectorAll("#catalog-chips .peace-chip");
+    const search = document.getElementById("catalog-search");
+    const sections = document.querySelectorAll("#catalog-groups [data-category-group]");
+    const empty = document.getElementById("catalog-empty");
+    const activeOnLoad = {{ (active_category | tojson) if active_category is not none else 'null' }};
+
+    let currentFilter = "all";
+    let currentSearch = "";
+
+    function applyFilter() {
+        let anyVisible = false;
+        sections.forEach(function (section) {
+            const groupKey = section.dataset.categoryGroup;
+            const groupMatches = currentFilter === "all" || groupKey === currentFilter;
+            let groupHasVisibleOps = false;
+            section.querySelectorAll(".peace-op-card").forEach(function (card) {
+                const haystack = (card.dataset.opName + " " + card.dataset.opDesc).toLowerCase();
+                const opMatches = haystack.includes(currentSearch);
+                const visible = groupMatches && opMatches;
+                card.classList.toggle("d-none", !visible);
+                if (visible) groupHasVisibleOps = true;
+            });
+            section.classList.toggle("d-none", !groupMatches || !groupHasVisibleOps);
+            if (groupMatches && groupHasVisibleOps) anyVisible = true;
+        });
+        if (empty) empty.classList.toggle("d-none", anyVisible);
+    }
+
+    chips.forEach(function (chip) {
+        chip.addEventListener("click", function () {
+            chips.forEach(function (c) { c.classList.remove("active"); });
+            chip.classList.add("active");
+            currentFilter = chip.dataset.filter || "all";
+            applyFilter();
+        });
+    });
+
+    if (search) {
+        search.addEventListener("input", function () {
+            currentSearch = (search.value || "").trim().toLowerCase();
+            applyFilter();
+        });
+    }
+
+    if (activeOnLoad) {
+        const targetChip = document.querySelector(`#catalog-chips .peace-chip[data-filter="${activeOnLoad}"]`);
+        if (targetChip) {
+            chips.forEach(function (c) { c.classList.remove("active"); });
+            targetChip.classList.add("active");
+            currentFilter = activeOnLoad;
+        }
+    }
+    applyFilter();
+})();
+</script>
+{% endblock %}

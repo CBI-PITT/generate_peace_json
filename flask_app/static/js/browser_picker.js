@@ -8,7 +8,7 @@ function openFileBrowser(fieldId) {
     if (frame.getAttribute("src") !== lastBrowserPath) {
         frame.setAttribute("src", lastBrowserPath);
     }
-    $("#fileBrowserModal").modal("show");
+    bootstrap.Modal.getOrCreateInstance(document.getElementById("fileBrowserModal")).show();
 }
 
 document.addEventListener("click", function (event) {
@@ -44,5 +44,5 @@ window.addEventListener("message", function (event) {
     const label = document.getElementById("selected-name-" + fieldId);
     if (label) label.textContent = `Selected: ${fileName || selectedPath}`;
 
-    $("#fileBrowserModal").modal("hide");
+    bootstrap.Modal.getOrCreateInstance(document.getElementById("fileBrowserModal")).hide();
 });
