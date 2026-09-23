@@ -93,7 +93,9 @@ The Flask app binds to `0.0.0.0:1212` in the current code.
 
 There is no formal build system in this workspace.
 
-There is also no configured linter, formatter, `pytest`, `tox`, `pyproject.toml`, `pytest.ini`, or `setup.cfg` here.
+There is no configured linter or formatter here. `pytest` is available in the
+peace-flask-test env and a render/static test suite guards the Browse picker
+contracts (see Tests below).
 
 Use these validation commands instead.
 
@@ -125,17 +127,29 @@ python3 -m py_compile flask_app/app.py flask_app/forms.py flask_app/operations/*
 
 ### Tests
 
-There is currently no automated test suite checked into this workspace.
+`tests/` (with `pytest.ini`, `testpaths = tests`) guards the Browse picker
+contracts: `.browse-btn` on every `data-target` button, the modal + picker
+includes per operation form template (AST-discovered, so future operations are
+covered automatically), `browser_picker.js` contracts, `browser_modal.html` BS5
+markup, base shell assets, and cross-repo glue (postMessage keys,
+`data-field-id`, the `/browser/dir_embed/` route).
 
-Because there are no tests, there is no real “single test” command to run today.
-
-If a test file is added later and `pytest` is introduced, use the normal single-test form:
+Run from the repo root:
 
 ```bash
-pytest path/to/test_file.py::test_name
+python3 -m pytest
 ```
 
-Until then, treat targeted `py_compile` plus manual validation as the required verification path.
+The tests are render/static based: they execute the Jinja templates with stub
+contexts and scan the HTML/JS contracts; they do not run JavaScript in a
+browser. If a test fails after a UI or template change, treat it as a broken
+picker contract, not a stale test.
+
+Single test:
+
+```bash
+pytest tests/test_browse_picker.py::test_name
+```
 
 ### Manual Validation
 
