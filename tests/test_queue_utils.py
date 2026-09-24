@@ -54,13 +54,40 @@ def test_queue_route_survives_broken_squeue(client, monkeypatch):
     assert "iana_experiment" not in html, "a failed squeue must render an empty queue, not a 500"
 
 
-def test_cancel_route(client, login_session, monkeypatch):
-    fake = fake_slurm_output([])
+def test_cancel_route_own_job(client, login_session, monkeypatch):
+    fake = fake_slurm_output([("squeue", "iana\n"), ("scancel", "")])
     monkeypatch.setattr(subprocess, "run", fake)
     login_session("iana")
     resp = client.post("/cancel", json={"job_id": "4242"})
     assert resp.status_code == 200
     assert "cancelled" in resp.get_json()["message"]
+    assert ["scancel", "4242"] in fake.calls
+
+
+def test_cancel_route_rejects_other_users_jobs(client, login_session, monkeypatch):
+    fake = fake_slurm_output([("squeue", "someone-else\n")])
+    monkeypatch.setattr(subprocess, "run", fake)
+    login_session("iana")
+    resp = client.post("/cancel", json={"job_id": "4242"})
+    assert resp.status_code == 403, "users must not cancel other users' jobs"
+    assert all(c[0] != "scancel" for c in fake.calls), "scancel must not run"
+
+
+def test_cancel_route_fails_closed_without_owner(client, login_session, monkeypatch):
+    fake = fake_slurm_output([("squeue", "")])  # owner cannot be determined
+    monkeypatch.setattr(subprocess, "run", fake)
+    login_session("iana")
+    resp = client.post("/cancel", json={"job_id": "4242"})
+    assert resp.status_code == 403, "fail closed when the owner is unknown"
+    assert all(c[0] != "scancel" for c in fake.calls), "scancel must not run"
+
+
+def test_cancel_route_admin_can_cancel_any(client, login_session, monkeypatch):
+    fake = fake_slurm_output([("squeue", "someone-else\n"), ("scancel", "")])
+    monkeypatch.setattr(subprocess, "run", fake)
+    login_session("CBI_Admin")
+    resp = client.post("/cancel", json={"job_id": "4242"})
+    assert resp.status_code == 200
     assert ["scancel", "4242"] in fake.calls
 
 
