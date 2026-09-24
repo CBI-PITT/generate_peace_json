@@ -1,38 +1,40 @@
-{% with messages = get_flashed_messages() %}
-{% if messages %}
-    <div class="notification is-danger">
-        {{ messages[0] }}. Go to <a href="{{ url_for('login') }}">login page</a>.
-    </div>
-{% endif %}
-{% endwith %}
-<!-- <form method="POST" action="{{ url_for('flask_file_browser.login_post') }}"> -->
-
 {% extends "flask_file_browser/ffbbase.html" %}
 
 {% block ffbcontent %}
-<div class="column is-4 is-offset-4">
-    <h3 class="title">Login</h3>
-    <div class="box">
-        <form method="POST" action="{{ url_for('login_post') }}">
-            <div class="field">
-                <div class="control">
-                    <input class="input is-large" type="text" name="username" placeholder="Lab Username" autofocus="">
+<div class="row justify-content-center">
+    <div class="col-12 col-sm-8 col-md-6 col-lg-4">
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                    {{ messages[0] }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                 </div>
-            </div>
-
-            <div class="field">
-                <div class="control">
-                    <input class="input is-large" type="password" name="password" placeholder="Lab Password">
+            {% endif %}
+        {% endwith %}
+        <div class="card ffb-card">
+            <div class="card-body p-4">
+                <div class="text-center mb-4">
+                    <i class="bi bi-person-circle ffb-auth-icon" aria-hidden="true"></i>
+                    <h1 class="h5 fw-semibold mb-0">Sign in</h1>
+                    <p class="text-muted small mb-0">Use your lab account to continue</p>
                 </div>
+                <form method="POST" action="{{ url_for('login_post') }}">
+                    <div class="mb-3">
+                        <label for="peace-username" class="form-label small fw-medium">Username</label>
+                        <input class="form-control" type="text" id="peace-username" name="username" placeholder="Lab username" autocomplete="username" autofocus>
+                    </div>
+                    <div class="mb-3">
+                        <label for="peace-password" class="form-label small fw-medium">Password</label>
+                        <input class="form-control" type="password" id="peace-password" name="password" placeholder="Lab password" autocomplete="current-password">
+                    </div>
+                    <div class="form-check mb-4">
+                        <input class="form-check-input" type="checkbox" name="remember" id="peace-remember">
+                        <label class="form-check-label small" for="peace-remember">Remember me</label>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100"><i class="bi bi-box-arrow-in-right me-1"></i>Login</button>
+                </form>
             </div>
-            <div class="field">
-                <label class="checkbox">
-                    <input type="checkbox" name="remember">
-                    Remember me
-                </label>
-            </div>
-            <button class="button is-block is-info is-large is-fullwidth">Login</button>
-        </form>
+        </div>
     </div>
 </div>
 {% endblock %}

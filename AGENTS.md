@@ -93,7 +93,9 @@ The Flask app binds to `0.0.0.0:1212` in the current code.
 
 There is no formal build system in this workspace.
 
-There is also no configured linter, formatter, `pytest`, `tox`, `pyproject.toml`, `pytest.ini`, or `setup.cfg` here.
+There is no configured linter or formatter here. `pytest` is available in the
+peace-flask-test env and a render/static test suite guards the Browse picker
+contracts (see Tests below).
 
 Use these validation commands instead.
 
@@ -125,17 +127,45 @@ python3 -m py_compile flask_app/app.py flask_app/forms.py flask_app/operations/*
 
 ### Tests
 
-There is currently no automated test suite checked into this workspace.
+`tests/` (with `pytest.ini`, `testpaths = tests`) covers the picker contracts
+plus the full app logic:
 
-Because there are no tests, there is no real “single test” command to run today.
+- `test_browse_picker.py`: `.browse-btn` on every `data-target` button, the
+  modal + picker includes per operation form template (AST-discovered, so
+  future operations are covered automatically), `browser_picker.js` contracts,
+  `browser_modal.html` BS5 markup, base shell assets, and cross-repo glue.
+- `test_catalog_routes.py`: `build_catalog()`, `/operations`, `/categories`
+  redirect, `/analyze/<category>` + `/read` pre-filtering, Home action cards.
+- `test_home_history.py`: `best_status`, `collect_workflow_job_ids`,
+  `enrich_*`, rendered My jobs / My workflows with mocked SLURM states.
+- `test_workflow_logic.py`: `validate_preprocessing_z_ranges` matrix,
+  `udpdate_steps` (orientation, metadata, output backfill, user stamping),
+  `/workflow/new` validation + submission writes, `/workflow/operation_form`
+  fragments, workflow-template round-trip.
+- `test_history_routes.py`: `run_control_command` (compressed job-id
+  normalization), `can_manage_record`, `resolve_forked_workflow_steps`, and the
+  `/history/job/*` + `/history/workflow/*` routes with permissions.
+- `test_queue_utils.py`: `/queue` parsing + cancel gating, `/cancel`,
+  `/get_output_dir`, `get_user` path derivation, `slurm_status` pure helpers.
 
-If a test file is added later and `pytest` is introduced, use the normal single-test form:
+All writes are sandboxed: conftest forces `PEACE_JSON_FOLDER` /
+`PEACE_JOB_HISTORY_DIR` to a temp dir before the app is imported, and workflow
+templates are monkeypatched to a temp folder. Login is mocked via the session
+(`load_user` accepts any id); squeue/sacct/scancel are mocked via
+`subprocess.run`. The tests are render/static + Flask-test-client based; they
+do not run JavaScript in a browser.
+
+Run from the repo root:
 
 ```bash
-pytest path/to/test_file.py::test_name
+python3 -m pytest
 ```
 
-Until then, treat targeted `py_compile` plus manual validation as the required verification path.
+Single test:
+
+```bash
+pytest tests/test_browse_picker.py::test_name
+```
 
 ### Manual Validation
 
