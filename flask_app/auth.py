@@ -1,3 +1,4 @@
+import os
 import time
 from flask import (render_template,
                    request,
@@ -32,8 +33,11 @@ def setup_auth(app):
 
     app.config['SESSION_COOKIE_SECURE'] = True
 
-    ## KEY FOR TESTING ONLY ##
-    app.secret_key = settings.get('auth', 'secret_key')
+    # Never reuse the settings.ini secret (it is group-readable and ships in
+    # the repo): prefer PEACE_SECRET_KEY, else keep the key the app already
+    # configured, else generate a random one for this boot.
+    import secrets as _secrets
+    app.secret_key = os.environ.get('PEACE_SECRET_KEY') or app.secret_key or _secrets.token_hex(32)
 
     ############################################################
     # Configure login manager

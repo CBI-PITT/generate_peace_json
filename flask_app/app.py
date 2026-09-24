@@ -3,6 +3,7 @@ import copy
 import importlib
 import os
 import re
+import secrets
 import subprocess
 from datetime import datetime
 
@@ -31,7 +32,10 @@ from utils.slurm_status import query_job_states, summarize_job_ids
 
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'your_secret_key'
+# Never hardcode: a guessable secret key allows session forgery (auth bypass).
+# Set PEACE_SECRET_KEY for stable sessions across restarts; otherwise a random
+# key is generated per boot.
+app.config['SECRET_KEY'] = os.environ.get('PEACE_SECRET_KEY') or secrets.token_hex(32)
 app.config['WTF_CSRF_ENABLED'] = False
 
 app.template_folder = 'templates'
@@ -830,6 +834,24 @@ def rerun_history_workflow_step(workflow_id, step_id):
     return jsonify({'message': 'Workflow fork re-submitted', 'workflow_id': new_payload.get('workflow_id')})
 
 
+def _slurm_job_owner(job_id):
+    """Return the SLURM owner of the job, or None if it cannot be determined."""
+    base = re.match(r'^(\d+)', str(job_id).strip())
+    base_id = base.group(1) if base else str(job_id).strip()
+    if not base_id:
+        return None
+    try:
+        result = subprocess.run(
+            ["squeue", "--noheader", "--format=%u", "--jobs=" + base_id],
+            capture_output=True, text=True)
+    except Exception:
+        return None
+    if result.returncode != 0:
+        return None
+    owners = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    return owners[0] if owners else None
+
+
 @app.route("/cancel", methods=["POST"])
 @login_required
 def cancel_job():
@@ -838,6 +860,12 @@ def cancel_job():
 
     if not job_id:
         return jsonify({"message": "Missing job ID"}), 400
+
+    # Fail closed: only the job's owner (or CBI_Admin) may cancel a job.
+    owner = _slurm_job_owner(job_id)
+    user = current_user.get_id()
+    if not user or (owner != user and user != "CBI_Admin"):
+        return jsonify({"message": "Not authorized to cancel this job"}), 403
 
     try:
         result = subprocess.run(["scancel", str(job_id)], capture_output=True, text=True)
