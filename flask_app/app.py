@@ -17,6 +17,7 @@ from workflows import BaseWorkflow
 
 # from flask_file_browser import extended_app
 from flask_file_browser import routes
+from data_dashboard import routes as data_dashboard_routes
 from auth import setup_auth, user_info
 from config import ENABLE_JOB_HISTORY
 from config import PORT
@@ -44,6 +45,10 @@ WORKFLOW_TEMPLATE_FOLDER = os.path.join(os.path.dirname(__file__), 'saved_workfl
 # Register the browser app blueprint
 # app.register_blueprint(extended_app, url_prefix='/browser')
 app = routes.init_blueprint(app, prefix="/browser")
+
+# Register the data dashboard blueprint (a no-op when disabled in its
+# settings.ini; PEACE pages check the DATA_DASHBOARD_ENABLED config flag)
+app = data_dashboard_routes.init_blueprint(app, prefix="/dashboard")
 
 app, login_manager = setup_auth(app)
 
