@@ -1,0 +1,206 @@
+/* PEACE Viewer: kaibu-like layout — layer panel on the left, canvas stage on
+   the right. The layout breaks out of the base container for a full-width,
+   tall stage; this stylesheet is only linked from the Viewer page. */
+
+body.peace-body {
+    overflow-x: hidden;
+}
+
+.viewer-layout {
+    display: flex;
+    gap: 1rem;
+    height: calc(100vh - 210px);
+    min-height: 460px;
+    margin-inline: calc(50% - 50vw);
+}
+
+/* ---------- Left control panel ---------- */
+
+.viewer-panel {
+    flex: 0 0 300px;
+    min-width: 240px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.viewer-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: .75rem 1rem;
+    border-bottom: 1px solid var(--bs-border-color);
+}
+
+.viewer-panel-count {
+    color: var(--bs-secondary-color);
+    font-size: .8rem;
+}
+
+.viewer-panel-body {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    gap: .75rem;
+    padding: 1rem;
+    overflow-y: auto;
+}
+
+.viewer-panel-footer {
+    padding: .5rem 1rem;
+    border-top: 1px solid var(--bs-border-color);
+    font-size: .78rem;
+}
+
+.viewer-layer-list {
+    display: flex;
+    flex-direction: column;
+    gap: .3rem;
+}
+
+.viewer-layer-empty {
+    color: var(--bs-secondary-color);
+    font-size: .85rem;
+    padding: .35rem .1rem;
+}
+
+.viewer-layer-item {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    padding: .3rem .5rem;
+    border: 1px solid var(--bs-border-color);
+    border-radius: .375rem;
+    cursor: pointer;
+    background: transparent;
+}
+
+.viewer-layer-item:hover {
+    background: var(--bs-tertiary-bg);
+}
+
+.viewer-layer-item.active {
+    border-color: var(--bs-primary);
+    background: rgba(13, 110, 253, .08);
+}
+
+.viewer-layer-type {
+    flex: 0 0 auto;
+    color: var(--bs-secondary-color);
+}
+
+.viewer-layer-eye {
+    flex: 0 0 auto;
+    padding: .1rem .3rem;
+    line-height: 1;
+    color: var(--bs-body-color);
+}
+
+.viewer-layer-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: .88rem;
+}
+
+.viewer-layer-menu {
+    flex: 0 0 auto;
+}
+
+.viewer-layer-kebab {
+    padding: .1rem .3rem;
+    line-height: 1;
+    color: var(--bs-secondary-color);
+}
+
+/* ---------- Right canvas stage ---------- */
+
+.viewer-stage {
+    flex: 1 1 auto;
+    min-width: 0;
+    position: relative;
+    overflow: hidden;
+}
+
+.viewer-canvas-wrap {
+    position: absolute;
+    inset: 0;
+}
+
+.viewer-canvas {
+    position: absolute;
+    inset: 0;
+    cursor: grab;
+}
+
+.viewer-canvas.viewer-dragging {
+    cursor: grabbing;
+}
+
+.viewer-hint {
+    position: absolute;
+    top: .75rem;
+    left: 50%;
+    transform: translateX(-50%);
+    max-width: 92%;
+    padding: .3rem .8rem;
+    border-radius: .375rem;
+    font-size: .85rem;
+    z-index: 5;
+    pointer-events: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.viewer-hint-muted {
+    background: rgba(20, 24, 33, .85);
+    color: #e9ecef;
+}
+
+.viewer-hint-error {
+    background: rgba(220, 53, 69, .92);
+    color: #fff;
+}
+
+.viewer-sliders {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: 1rem;
+    width: min(680px, calc(100% - 2rem));
+    padding: .6rem 1rem;
+    border-radius: .5rem;
+    background: rgba(20, 24, 33, .85);
+    z-index: 5;
+}
+
+.viewer-slider-row {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+}
+
+.viewer-slider-row + .viewer-slider-row {
+    margin-top: .3rem;
+}
+
+.viewer-slider-label {
+    flex: 0 0 64px;
+    text-align: right;
+    font-size: .8rem;
+    color: #adb5bd;
+}
+
+.viewer-slider-value {
+    flex: 0 0 auto;
+    min-width: 64px;
+    text-align: center;
+    font-size: .8rem;
+    color: #e9ecef;
+    font-variant-numeric: tabular-nums;
+}
+
+.viewer-sliders .form-range {
+    flex: 1 1 auto;
+    min-width: 0;
+}

@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block title %}Viewer{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='styles/viewer.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="viewer-layout">
+    <aside class="viewer-panel card">
+        <div class="viewer-panel-header">
+            <span class="fw-semibold"><i class="bi bi-layers me-1"></i>Layers</span>
+            <span class="viewer-panel-count" id="layerCount"></span>
+        </div>
+        <div class="viewer-panel-body">
+            <div class="dropdown viewer-add-wrap">
+                <button type="button" class="btn btn-primary w-100" id="addLayerBtn"
+                        data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="bi bi-plus-lg me-1"></i>Add layer
+                </button>
+                <ul class="dropdown-menu viewer-add-menu" aria-labelledby="addLayerBtn">
+                    <li>
+                        <button type="button" class="dropdown-item viewer-add-layer" data-layer-type="image">
+                            <i class="bi bi-image me-2"></i>Image layer
+                        </button>
+                    </li>
+                    <li>
+                        <button type="button" class="dropdown-item viewer-add-layer" data-layer-type="points">
+                            <i class="bi bi-record-circle me-2"></i>Points layer
+                        </button>
+                    </li>
+                </ul>
+            </div>
+            <div id="layerList" class="viewer-layer-list"></div>
+        </div>
+        <div class="viewer-panel-footer text-muted">
+            Scroll to zoom &middot; drag to pan &middot; double-click to fit
+        </div>
+    </aside>
+    <div class="viewer-stage card">
+        <div class="viewer-canvas-wrap" id="viewerCanvasWrap">
+            <canvas id="viewerCanvas" class="viewer-canvas"></canvas>
+            <div id="viewerHint" class="viewer-hint d-none"></div>
+            <div class="viewer-sliders">
+                <div class="viewer-slider-row d-none" id="zSliderRow">
+                    <label class="viewer-slider-label" for="zSlider">z</label>
+                    <input type="range" class="form-range" id="zSlider" min="0" max="0" step="1" value="0">
+                    <span class="viewer-slider-value" id="zValue">z: 0 / 0</span>
+                </div>
+                <div class="viewer-slider-row d-none" id="contrastRow">
+                    <label class="viewer-slider-label">contrast</label>
+                    <span class="viewer-slider-value" id="contrastMinValue">&ndash;</span>
+                    <input type="range" class="form-range" id="contrastMinSlider" min="0" max="255" value="0">
+                    <input type="range" class="form-range" id="contrastMaxSlider" min="0" max="255" value="255">
+                    <span class="viewer-slider-value" id="contrastMaxValue">&ndash;</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<input type="hidden" id="viewer-image-path">
+<input type="hidden" id="viewer-points-path">
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+{% include "browser_modal.html" %}
+<script src="{{ url_for('static', filename='viewer/vendor/geotiff.js') }}"></script>
+<script src="{{ url_for('static', filename='js/browser_picker.js') }}"></script>
+<script src="{{ url_for('static', filename='viewer/viewer.js') }}"></script>
+{% endblock %}
