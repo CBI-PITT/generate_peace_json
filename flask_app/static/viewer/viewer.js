@@ -355,6 +355,21 @@
         return { min: min, max: max };
     }
 
+    // Slider domain for the contrast window: unsigned integer images get
+    // 0 to the dtype maximum (0-255, 0-65535); signed integers and floats
+    // fall back to the slice data's min/max (a float32 dtype max of ~3.4e38
+    // would make the slider unusable).
+    function contrastDomain(slice, dataRange) {
+        var first = Array.isArray(slice.data) ? slice.data[0] : slice.data;
+        var name = first && first.constructor ? first.constructor.name : '';
+        if (name === 'Uint8Array') return { min: 0, max: 255, step: 1 };
+        if (name === 'Uint16Array') return { min: 0, max: 65535, step: 1 };
+        if (name === 'Uint32Array') return { min: 0, max: 4294967295, step: 1 };
+        var span = (dataRange.max - dataRange.min) || 1;
+        var step = (name === 'Float32Array' || name === 'Float64Array') ? span / 1000 : 1;
+        return { min: dataRange.min, max: dataRange.max, step: step };
+    }
+
     // Map the raw values through the contrast window into an 8-bit canvas.
     function renderSliceCanvas(slice, cmin, cmax) {
         var w = slice.width;
@@ -451,6 +466,7 @@
                 if (!layer.dataRange) {
                     layer.dataRange = computeRange(slice);
                     layer.float = !Number.isInteger(layer.dataRange.min) || !Number.isInteger(layer.dataRange.max);
+                    layer.contrastDomain = contrastDomain(slice, layer.dataRange);
                     layer.contrast = { min: layer.dataRange.min, max: layer.dataRange.max };
                     if (sliderImageLayer() === layer) syncSliders();
                 }
@@ -516,6 +532,7 @@
         layer.sliceBytes = 0; // approximate bytes per cached slice (raw + painted)
         layer.contrast = null;
         layer.dataRange = null;
+        layer.contrastDomain = null;
         layers.push(layer);
         activeLayerId = layer.id;
         view.fitted = false;  // refit to the new layer once its first slice loads
@@ -736,19 +753,36 @@
     }
 
     function updateContrastSliders(img) {
-        if (!img.dataRange || !img.contrast) return;
-        var span = (img.dataRange.max - img.dataRange.min) || 1;
-        var step = img.float ? span / 255 : 1;
-        el.contrastMin.min = img.dataRange.min;
-        el.contrastMin.max = img.dataRange.max;
-        el.contrastMin.step = step;
+        if (!img.contrastDomain || !img.contrast) return;
+        var domain = img.contrastDomain;
+        el.contrastMin.min = domain.min;
+        el.contrastMin.max = domain.max;
+        el.contrastMin.step = domain.step;
         el.contrastMin.value = img.contrast.min;
-        el.contrastMax.min = img.dataRange.min;
-        el.contrastMax.max = img.dataRange.max;
-        el.contrastMax.step = step;
+        el.contrastMax.min = domain.min;
+        el.contrastMax.max = domain.max;
+        el.contrastMax.step = domain.step;
         el.contrastMax.value = img.contrast.max;
+        positionContrastFill(img);
         el.contrastMinValue.textContent = fmtContrast(img.contrast.min, img.float);
         el.contrastMaxValue.textContent = fmtContrast(img.contrast.max, img.float);
+        raiseContrastHandle(img, null);
+    }
+
+    // Position the filled span of the dual slider between the two handles.
+    function positionContrastFill(img) {
+        var domain = img.contrastDomain;
+        var span = (domain.max - domain.min) || 1;
+        var lo = clamp((img.contrast.min - domain.min) / span, 0, 1) * 100;
+        var hi = clamp((img.contrast.max - domain.min) / span, 0, 1) * 100;
+        el.contrastFill.style.left = lo + '%';
+        el.contrastFill.style.width = Math.max(0, hi - lo) + '%';
+    }
+
+    // Keep the last-touched handle grabbable when the two thumbs meet.
+    function raiseContrastHandle(img, which) {
+        el.contrastMin.style.zIndex = which === 'min' ? '5' : '3';
+        el.contrastMax.style.zIndex = which === 'max' ? '5' : '4';
     }
 
     function syncSliders() {
@@ -761,7 +795,7 @@
         } else {
             el.zRow.classList.add('d-none');
         }
-        if (img && img.dataRange) {
+        if (img && img.contrastDomain) {
             el.contrastRow.classList.remove('d-none');
             updateContrastSliders(img);
         } else {
@@ -804,6 +838,8 @@
             img.contrast.min = v;
             el.contrastMin.value = v;
             el.contrastMinValue.textContent = fmtContrast(v, img.float);
+            positionContrastFill(img);
+            raiseContrastHandle(img, 'min');
             draw();
         });
 
@@ -816,6 +852,8 @@
             img.contrast.max = v;
             el.contrastMax.value = v;
             el.contrastMaxValue.textContent = fmtContrast(v, img.float);
+            positionContrastFill(img);
+            raiseContrastHandle(img, 'max');
             draw();
         });
     }
@@ -1004,6 +1042,7 @@
         el.contrastMax = $('contrastMaxSlider');
         el.contrastMinValue = $('contrastMinValue');
         el.contrastMaxValue = $('contrastMaxValue');
+        el.contrastFill = $('contrastFill');
         if (!el.canvas || !el.layerList) return;
         ctx = el.canvas.getContext('2d');
 

@@ -42,6 +42,8 @@ def test_viewer_template_wiring():
         'id="viewerCanvasWrap"',
         'id="viewerHint"',
         'id="zSlider"',
+        'id="contrastDual"',
+        'id="contrastFill"',
         'id="contrastMinSlider"',
         'id="contrastMaxSlider"',
         'id="viewer-image-path"',
@@ -107,6 +109,11 @@ def test_viewer_js_contracts():
         "AbortController",
         "abortStaleSliceFetches",
         "SLICE_CACHE_BYTES",
+        # dual-handle contrast slider: one track, min + max handles, domain
+        # 0..dtype-max for unsigned ints (data range for signed/float)
+        "contrastDomain",
+        "positionContrastFill",
+        "raiseContrastHandle",
         # file serving + folder listing through the browser blueprint
         "'/browser/dir'",
         "'/browser/dir_json'",

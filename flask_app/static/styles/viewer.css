@@ -200,7 +200,97 @@ body.peace-body {
     font-variant-numeric: tabular-nums;
 }
 
-.viewer-sliders .form-range {
+/* Dual-handle contrast slider: two stacked range inputs over one custom
+   track. The inputs pass pointer events through to their thumbs only, so
+   either handle can be dragged on the same track. */
+.viewer-dual-range {
+    position: relative;
     flex: 1 1 auto;
     min-width: 0;
+    height: 1.25rem;
+}
+
+.viewer-dual-track {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    height: 4px;
+    transform: translateY(-50%);
+    border-radius: 2px;
+    background: rgba(233, 236, 239, .35);
+}
+
+.viewer-dual-fill {
+    position: absolute;
+    top: 50%;
+    height: 4px;
+    transform: translateY(-50%);
+    border-radius: 2px;
+    background: #0d6efd;
+}
+
+.viewer-dual-input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    margin: 0;
+    appearance: none;
+    -webkit-appearance: none;
+    background: transparent;
+    pointer-events: none;
+    outline: none;
+}
+
+/* Stacking when the handles meet: JS raises the min handle's input when the
+   two thumbs touch so it stays grabbable. */
+#contrastMaxSlider { z-index: 4; }
+#contrastMinSlider { z-index: 3; }
+
+.viewer-dual-input:focus-visible {
+    outline: 2px solid rgba(13, 110, 253, .6);
+    outline-offset: 2px;
+}
+
+.viewer-dual-input::-webkit-slider-runnable-track {
+    background: transparent;
+    border: none;
+}
+
+.viewer-dual-input::-moz-range-track {
+    background: transparent;
+    border: none;
+}
+
+.viewer-dual-input::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    pointer-events: auto;
+    width: 14px;
+    height: 14px;
+    margin-top: 3px;
+    border-radius: 50%;
+    background: #fff;
+    border: 2px solid #0d6efd;
+    cursor: grab;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, .5);
+}
+
+.viewer-dual-input::-moz-range-thumb {
+    pointer-events: auto;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #fff;
+    border: 2px solid #0d6efd;
+    cursor: grab;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, .5);
+}
+
+.viewer-dual-input:active::-webkit-slider-thumb {
+    cursor: grabbing;
+}
+
+.viewer-dual-input:active::-moz-range-thumb {
+    cursor: grabbing;
 }

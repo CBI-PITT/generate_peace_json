@@ -51,8 +51,12 @@
                 <div class="viewer-slider-row d-none" id="contrastRow">
                     <label class="viewer-slider-label">contrast</label>
                     <span class="viewer-slider-value" id="contrastMinValue">&ndash;</span>
-                    <input type="range" class="form-range" id="contrastMinSlider" min="0" max="255" value="0">
-                    <input type="range" class="form-range" id="contrastMaxSlider" min="0" max="255" value="255">
+                    <div class="viewer-dual-range" id="contrastDual">
+                        <div class="viewer-dual-track"></div>
+                        <div class="viewer-dual-fill" id="contrastFill"></div>
+                        <input type="range" class="viewer-dual-input" id="contrastMinSlider" min="0" max="255" value="0" step="1">
+                        <input type="range" class="viewer-dual-input" id="contrastMaxSlider" min="0" max="255" value="255" step="1">
+                    </div>
                     <span class="viewer-slider-value" id="contrastMaxValue">&ndash;</span>
                 </div>
             </div>
