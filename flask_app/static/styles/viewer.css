@@ -194,6 +194,10 @@ body.peace-body {
     font-variant-numeric: tabular-nums;
 }
 
+.viewer-nn-group {
+    margin-top: .5rem;
+}
+
 /* Crosshair cursor while a points tool mode is active */
 .viewer-canvas-wrap.viewer-mode-add .viewer-canvas,
 .viewer-canvas-wrap.viewer-mode-select .viewer-canvas,

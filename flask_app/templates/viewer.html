@@ -70,6 +70,17 @@
                                        min="1" max="8" step="1" value="2">
                             </label>
                             <div id="classColorList" class="viewer-class-list"></div>
+                            <div class="btn-group w-100 viewer-nn-group" role="group" aria-label="Point classifier">
+                                <button type="button" class="btn btn-sm btn-outline-primary" id="nnTrainBtn"
+                                        title="Train on the classified points of the current z plane" disabled>
+                                    <i class="bi bi-cpu me-1"></i>Train
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-primary" id="nnPredictBtn"
+                                        title="Predict classes for unclassified points on the current z plane" disabled>
+                                    <i class="bi bi-magic me-1"></i>Predict
+                                </button>
+                            </div>
+                            <div class="viewer-tools-hint text-muted" id="nnStatus">No model yet.</div>
                         </div>
                     </div>
                 </div>

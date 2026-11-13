@@ -6,8 +6,10 @@ It reuses the shared browser modal chain (browser_modal.html +
 browser_picker.js) and consumes the picker postMessage payloads keyed on the
 'viewer-image-path' / 'viewer-points-path' field ids. Points layers export
 their parsed coordinates through the kebab-menu Export entry as a canonical
-napari-style CSV and get a tools panel below the layer list (add / select /
-rectangle-select / classify / delete-selected points).
+napari-style CSV (per-class files plus an _unclassified file when classes
+are in use) and get a tools panel below the layer list (add / select /
+rectangle-select / classify / delete-selected points) with an in-browser
+tiny-MLP classifier (Train / Predict on the current z plane).
 """
 
 import pytest
@@ -163,10 +165,14 @@ def test_viewer_export_contracts():
         "hasZ ? 'axis-0,axis-1,axis-2' : 'axis-0,axis-1'",
         "pointsCsvName",
         "/\\.csv$/i",
-        # multi-class export: one <name>_classN.csv per non-empty class
-        # (single class or unclassified layers stay a plain <name>.csv)
+        # multi-class export: one <name>_classN.csv per non-empty class plus
+        # <name>_unclassified.csv for the unassigned points (a layer with no
+        # non-empty class stays a plain <name>.csv)
         "classifyExportGroups",
         "classFileNameFor",
+        "unclassifiedFileNameFor",
+        "_unclassified.csv",
+        "groups.unclassified",
         "pointsExportBase",
         "pointsCsvText",
     ]:
@@ -189,9 +195,14 @@ def test_viewer_tools_contracts():
         'id="classifySubPanel"',
         'id="classCountInput"',
         'id="classColorList"',
+        'id="nnTrainBtn"',
+        'id="nnPredictBtn"',
+        'id="nnStatus"',
         'bi-tools',
         'bi-cursor',
         'bi-tags',
+        'bi-cpu',
+        'bi-magic',
         'Additive selection',
         'viewer-tool-toggle',
     ]:
@@ -222,11 +233,26 @@ def test_viewer_tools_contracts():
         "pointEligible",
         "nextClass",
         "pointFillColor",
-        # classification: all points default to class 1; class cycling wraps
+        # classification: points start unclassified; the first click assigns
+        # class 1 and cycling wraps N -> 1
         "layer.classified = true",
         "p.c = nextClass(p.c, layer.classCount)",
         "CLASS_COLORS",
         "MAX_CLASSES",
+        "UNCLASSIFIED_COLOR",
+        # in-browser classifier: features = 10x10 intensity patch + coords,
+        # tiny MLP (softmax + Adam), train/predict on the current z plane
+        "trainClassifier",
+        "predictUnclassified",
+        "currentZPoints",
+        "pointFeatures",
+        "NN_PATCH",
+        "nnCreate",
+        "nnForward",
+        "nnTrain",
+        "adamUpdate",
+        "layer.nn",
+        "updateNnControls",
         # rendering: class colors + selected highlight ring + rect overlay
         "SELECT_RING",
         "setLineDash([4, 3])",
@@ -241,6 +267,7 @@ def test_viewer_tools_contracts():
         ".viewer-tool-sub",
         ".viewer-class-swatch",
         ".viewer-class-row",
+        ".viewer-nn-group",
         ".viewer-mode-select .viewer-canvas",
     ]:
         assert needle in css, f"viewer.css missing {needle}"

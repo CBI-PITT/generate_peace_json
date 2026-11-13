@@ -19,11 +19,10 @@
 
     var SLICE_CACHE_MAX = 8;   // decoded raw slices kept per image layer
     var PAINT_CACHE_MAX = 8;   // rendered (contrast-applied) canvases per layer
-    var POINT_COLOR = '#ffdd00';
     var POINT_EDGE = 'rgba(20, 20, 20, 0.85)';
     var POINT_RADIUS = 3.5;
     var CLASS_COLORS = [
-        '#ffdd00', // class 1: the default point color
+        '#ffdd00', // class 1
         '#3b82f6',
         '#ef4444',
         '#22d3ee',
@@ -33,6 +32,8 @@
         '#f472b6'
     ];
     var MAX_CLASSES = CLASS_COLORS.length;
+    // Points that have not been assigned a class yet render gray
+    var UNCLASSIFIED_COLOR = '#9ca3af';
     var PICK_RADIUS = 6;   // screen px around a point that counts as a hit
     var SELECT_RING = '#ffffff';
     var CLICK_SLOP = 4;    // px of mouse movement separating a click from a drag
@@ -335,12 +336,16 @@
         }
         var groups = classifyExportGroups(layer);
         if (groups) {
-            // classified layer with several classes: one <name>_classN.csv
-            // per non-empty class, in ascending class order (every point of
-            // a classified layer belongs to a class, default 1)
-            for (var g = 0; g < groups.length; g++) {
-                var blob = new Blob([pointsCsvText(groups[g].points)], { type: 'text/csv;charset=utf-8' });
-                downloadBlob(blob, classFileNameFor(layer.name, groups[g].k));
+            // classified layer with at least one non-empty class: one
+            // <name>_classN.csv per non-empty class in ascending order, plus
+            // <name>_unclassified.csv for the points still unassigned
+            for (var g = 0; g < groups.classes.length; g++) {
+                var blob = new Blob([pointsCsvText(groups.classes[g].points)], { type: 'text/csv;charset=utf-8' });
+                downloadBlob(blob, classFileNameFor(layer.name, groups.classes[g].k));
+            }
+            if (groups.unclassified.length > 0) {
+                var ublob = new Blob([pointsCsvText(groups.unclassified)], { type: 'text/csv;charset=utf-8' });
+                downloadBlob(ublob, unclassifiedFileNameFor(layer.name));
             }
             return;
         }
@@ -357,17 +362,27 @@
         return pointsExportBase(name) + '_class' + k + '.csv';
     }
 
+    function unclassifiedFileNameFor(name) {
+        return pointsExportBase(name) + '_unclassified.csv';
+    }
+
     // Export groups for a classified layer: null when the layer has no
-    // classification or a single class (plain <name>.csv, no suffix);
-    // otherwise one {k, points} entry per non-empty class in ascending order.
+    // classification or no class has points (plain <name>.csv, no suffix);
+    // otherwise the non-empty classes in ascending order plus the points
+    // that are still unclassified.
     function classifyExportGroups(layer) {
-        if (!layer.classified || (layer.classCount || 1) <= 1) return null;
-        var groups = [];
-        for (var k = 1; k <= layer.classCount; k++) {
+        if (!layer.classified) return null;
+        var classes = [];
+        for (var k = 1; k <= (layer.classCount || 1); k++) {
             var pts = layer.coords.filter(function (p) { return p.c === k; });
-            if (pts.length > 0) groups.push({ k: k, points: pts });
+            if (pts.length > 0) classes.push({ k: k, points: pts });
         }
-        return groups.length ? groups : null;
+        if (classes.length === 0) return null;
+        var unclassified = [];
+        for (var i = 0; i < layer.coords.length; i++) {
+            if (!layer.coords[i].c) unclassified.push(layer.coords[i]);
+        }
+        return { classes: classes, unclassified: unclassified };
     }
 
     // ------------------------------------------------------------------
@@ -385,7 +400,7 @@
     }
 
     function pointFillColor(p) {
-        return p.c ? classColor(p.c) : POINT_COLOR;
+        return p.c ? classColor(p.c) : UNCLASSIFIED_COLOR;
     }
 
     // Class cycling: 1 -> 2 -> ... -> N -> 1 (wraps around); a point that
@@ -939,20 +954,16 @@
         return layer && layer.type === 'points' ? layer : null;
     }
 
-    // Enabling classification assigns every point to class 1 by default.
+    // Enabling classification starts every point as unclassified (c null);
+    // clicking points with the Classify tool then assigns their classes.
     function activateClassification(layer) {
         layer.classified = true;
         if (!layer.classCount) layer.classCount = 2;
-        for (var i = 0; i < layer.coords.length; i++) {
-            var p = layer.coords[i];
-            if (!p.c || p.c < 1) p.c = 1;
-            if (p.c > layer.classCount) p.c = layer.classCount;
-        }
     }
 
     function setCanvasMode(mode) {
-        // entering classify mode activates classification: every point is
-        // assigned to class 1 by default
+        // entering classify mode activates classification: every point
+        // starts as unclassified and is colored as its class once clicked
         if (mode === 'classify') {
             var layer = activePointsLayer();
             if (layer && !layer.classified) activateClassification(layer);
@@ -991,13 +1002,56 @@
         if (canvasMode === 'classify') {
             el.classCountInput.value = String(layer.classCount || 2);
             renderClassColorList(layer);
+            updateNnControls(layer);
         }
     }
 
-    // Per-class color chips with live point counts.
+    // Train/Predict button state + model status line in the classify
+    // sub-panel: Train needs a classified point on the current z plane,
+    // Predict needs a trained model.
+    function updateNnControls(layer) {
+        var ref = referenceImageLayer();
+        var sliceReady = !!(ref && ref.slices && ref.slices.has(ref.z));
+        var hasClassified = false;
+        if (sliceReady) {
+            hasClassified = currentZPoints(layer, ref.z).some(function (p) { return p.c; });
+        }
+        el.nnTrain.disabled = !hasClassified;
+        el.nnPredict.disabled = !layer.nn;
+        if (!sliceReady) {
+            el.nnStatus.textContent = 'Load an image layer and wait for the current slice to decode.';
+        } else if (layer.nn) {
+            el.nnStatus.textContent = 'Model: z=' + layer.nn.trainedZ + ' · ' + layer.nn.count +
+                ' points · loss ' + layer.nn.loss.toFixed(3);
+        } else {
+            el.nnStatus.textContent = NN_NO_MODEL_TEXT;
+        }
+    }
+
+    // Per-class color chips with live point counts, plus the unclassified
+    // row on top (every point starts there when classification is enabled).
     function renderClassColorList(layer) {
         var wrap = el.classColorList;
         wrap.textContent = '';
+        var unclassified = 0;
+        for (var u = 0; u < layer.coords.length; u++) {
+            if (!layer.coords[u].c) unclassified++;
+        }
+        var uRow = document.createElement('div');
+        uRow.className = 'viewer-class-row';
+        var uSwatch = document.createElement('span');
+        uSwatch.className = 'viewer-class-swatch';
+        uSwatch.style.backgroundColor = UNCLASSIFIED_COLOR;
+        var uLabel = document.createElement('span');
+        uLabel.className = 'viewer-class-label';
+        uLabel.textContent = 'unclassified';
+        var uBadge = document.createElement('span');
+        uBadge.className = 'viewer-class-count-badge text-muted';
+        uBadge.textContent = String(unclassified);
+        uRow.appendChild(uSwatch);
+        uRow.appendChild(uLabel);
+        uRow.appendChild(uBadge);
+        wrap.appendChild(uRow);
         var n = layer.classCount || 1;
         for (var k = 1; k <= n; k++) {
             var count = 0;
@@ -1043,6 +1097,8 @@
             }
             renderToolsPanel();
         });
+        el.nnTrain.addEventListener('click', trainClassifier);
+        el.nnPredict.addEventListener('click', predictUnclassified);
     }
 
     function clearSelection(layer) {
@@ -1071,7 +1127,8 @@
         var ref = referenceImageLayer();
         var noZ = layer.coords.every(function (p) { return p.z === null; });
         var z = noZ ? null : (ref ? ref.z : null);
-        layer.coords.push({ z: z, y: wy, x: wx, c: layer.classified ? 1 : null, sel: false });
+        // new points start unclassified too (click to assign a class)
+        layer.coords.push({ z: z, y: wy, x: wx, c: null, sel: false });
         draw();
         renderToolsPanel();
     }
@@ -1141,6 +1198,239 @@
         }
         draw();
         renderToolsPanel();
+    }
+
+    // ------------------------------------------------------------------
+    // Points classifier: tiny MLP trained in the browser
+    // ------------------------------------------------------------------
+
+    // The classifier uses only the current z plane (for now): training data
+    // are the classified points on the reference image plane, prediction
+    // runs on the unclassified points of the same plane.
+    var NN_PATCH = 10;      // 10x10 intensity patch around a point
+    var NN_HIDDEN = 24;     // hidden layer width
+    var NN_EPOCHS = 150;    // full-batch training epochs
+    var NN_LR = 0.05;       // Adam learning rate
+    var NN_NO_MODEL_TEXT = 'No model yet — classify some points on this z plane, then Train.';
+
+    // Points that participate on a z plane: 3-column points whose z matches
+    // the plane plus every 2-column point (z null).
+    function currentZPoints(layer, viewZ) {
+        return layer.coords.filter(function (p) { return pointEligible(p, viewZ); });
+    }
+
+    // Feature vector for one point from the decoded raw slice: a normalized
+    // NN_PATCH x NN_PATCH intensity patch around the point (first channel,
+    // edge-clamped sampling) plus the normalized point coordinates.
+    function pointFeatures(slice, p, dataRange) {
+        var half = NN_PATCH / 2;
+        var stride = slice.interleaved ? slice.spp : 1;
+        var plane = slice.interleaved ? slice.data : slice.data[0];
+        var w = slice.width;
+        var h = slice.height;
+        var cx = clamp(Math.round(p.x), 0, w - 1);
+        var cy = clamp(Math.round(p.y), 0, h - 1);
+        var span = (dataRange.max - dataRange.min) || 1;
+        var f = new Array(NN_PATCH * NN_PATCH + 2);
+        var k = 0;
+        for (var dy = -half; dy < NN_PATCH - half; dy++) {
+            for (var dx = -half; dx < NN_PATCH - half; dx++) {
+                var yy = clamp(cy + dy, 0, h - 1);
+                var xx = clamp(cx + dx, 0, w - 1);
+                var v = plane[(yy * w + xx) * stride];
+                f[k++] = (v - dataRange.min) / span;
+            }
+        }
+        f[k++] = p.x / w;
+        f[k++] = p.y / h;
+        return f;
+    }
+
+    // Tiny MLP: NN_PATCH*NN_PATCH + 2 inputs -> ReLU hidden layer -> softmax
+    // over the classes present. Weights are flat typed arrays so training is
+    // plain loops; a few hundred points train in milliseconds.
+    function nnRandWeights(n, scale) {
+        var w = new Float64Array(n);
+        for (var i = 0; i < n; i++) w[i] = (Math.random() * 2 - 1) * scale;
+        return w;
+    }
+
+    function nnCreate(nIn, nHidden, nOut) {
+        return {
+            nIn: nIn,
+            nHidden: nHidden,
+            nOut: nOut,
+            w1: nnRandWeights(nHidden * nIn, Math.sqrt(2 / nIn)),
+            b1: new Float64Array(nHidden),
+            w2: nnRandWeights(nOut * nHidden, Math.sqrt(2 / nHidden)),
+            b2: new Float64Array(nOut)
+        };
+    }
+
+    function nnForward(net, x) {
+        var hidden = new Float64Array(net.nHidden);
+        for (var j = 0; j < net.nHidden; j++) {
+            var sum = net.b1[j];
+            var off = j * net.nIn;
+            for (var i = 0; i < net.nIn; i++) sum += net.w1[off + i] * x[i];
+            hidden[j] = sum > 0 ? sum : 0;
+        }
+        var probs = new Float64Array(net.nOut);
+        var max = -Infinity;
+        for (var o = 0; o < net.nOut; o++) {
+            var s = net.b2[o];
+            var off2 = o * net.nHidden;
+            for (var h = 0; h < net.nHidden; h++) s += net.w2[off2 + h] * hidden[h];
+            probs[o] = s;
+            if (s > max) max = s;
+        }
+        var total = 0;
+        for (var o2 = 0; o2 < net.nOut; o2++) {
+            probs[o2] = Math.exp(probs[o2] - max);
+            total += probs[o2];
+        }
+        for (var o3 = 0; o3 < net.nOut; o3++) probs[o3] /= total;
+        return { hidden: hidden, probs: probs };
+    }
+
+    function adamUpdate(p, g, m, v, batch, lr, beta1, beta2, eps, c1, c2) {
+        for (var i = 0; i < p.length; i++) {
+            var gi = g[i] / batch;
+            m[i] = beta1 * m[i] + (1 - beta1) * gi;
+            v[i] = beta2 * v[i] + (1 - beta2) * gi * gi;
+            p[i] -= lr * (m[i] / c1) / (Math.sqrt(v[i] / c2) + eps);
+        }
+    }
+
+    // Full-batch Adam on the cross-entropy loss; returns the mean loss of
+    // the final epoch.
+    function nnTrain(net, xs, labels, epochs, lr) {
+        var nIn = net.nIn;
+        var nHidden = net.nHidden;
+        var nOut = net.nOut;
+        var n = xs.length;
+        var mw1 = new Float64Array(net.w1.length), vw1 = new Float64Array(net.w1.length);
+        var mb1 = new Float64Array(nHidden), vb1 = new Float64Array(nHidden);
+        var mw2 = new Float64Array(net.w2.length), vw2 = new Float64Array(net.w2.length);
+        var mb2 = new Float64Array(nOut), vb2 = new Float64Array(nOut);
+        var gw1 = new Float64Array(net.w1.length), gb1 = new Float64Array(nHidden);
+        var gw2 = new Float64Array(net.w2.length), gb2 = new Float64Array(nOut);
+        var beta1 = 0.9;
+        var beta2 = 0.999;
+        var eps = 1e-8;
+        var loss = 0;
+        for (var epoch = 0; epoch < epochs; epoch++) {
+            gw1.fill(0); gb1.fill(0); gw2.fill(0); gb2.fill(0);
+            loss = 0;
+            for (var s = 0; s < n; s++) {
+                var x = xs[s];
+                var fw = nnForward(net, x);
+                var y = labels[s];
+                loss += -Math.log(Math.max(fw.probs[y], 1e-12));
+                for (var o = 0; o < nOut; o++) {
+                    var d = fw.probs[o] - (o === y ? 1 : 0);
+                    gb2[o] += d;
+                    var off = o * nHidden;
+                    for (var h = 0; h < nHidden; h++) gw2[off + h] += d * fw.hidden[h];
+                }
+                for (var j = 0; j < nHidden; j++) {
+                    if (fw.hidden[j] <= 0) continue;
+                    var dh = 0;
+                    for (var o2 = 0; o2 < nOut; o2++) {
+                        dh += (fw.probs[o2] - (o2 === y ? 1 : 0)) * net.w2[o2 * nHidden + j];
+                    }
+                    var off1 = j * nIn;
+                    for (var i = 0; i < nIn; i++) gw1[off1 + i] += dh * x[i];
+                }
+            }
+            var c1 = 1 - Math.pow(beta1, epoch + 1);
+            var c2 = 1 - Math.pow(beta2, epoch + 1);
+            adamUpdate(net.w1, gw1, mw1, vw1, n, lr, beta1, beta2, eps, c1, c2);
+            adamUpdate(net.b1, gb1, mb1, vb1, n, lr, beta1, beta2, eps, c1, c2);
+            adamUpdate(net.w2, gw2, mw2, vw2, n, lr, beta1, beta2, eps, c1, c2);
+            adamUpdate(net.b2, gb2, mb2, vb2, n, lr, beta1, beta2, eps, c1, c2);
+        }
+        return loss / n;
+    }
+
+    // Train on the classified points of the current z plane. Features come
+    // from the reference image layer's decoded slice (intensity patch +
+    // coordinates); the model is stored on the layer until re-trained.
+    function trainClassifier() {
+        var layer = activePointsLayer();
+        if (!layer || !layer.classified) {
+            errorHint('Enter Classify mode and assign some classes first.');
+            return;
+        }
+        var ref = referenceImageLayer();
+        if (!ref || !ref.slices || !ref.slices.has(ref.z)) {
+            errorHint('The current z slice of the image layer is not loaded yet.');
+            return;
+        }
+        var slice = ref.slices.get(ref.z);
+        var pts = currentZPoints(layer, ref.z).filter(function (p) { return p.c; });
+        if (pts.length === 0) {
+            errorHint('No classified points on z=' + ref.z + ' — click points with the Classify tool first.');
+            return;
+        }
+        var classSet = {};
+        var classes = [];
+        for (var i = 0; i < pts.length; i++) {
+            var c = pts[i].c;
+            if (!classSet[c]) {
+                classSet[c] = true;
+                classes.push(c);
+            }
+        }
+        var xs = [];
+        var labels = [];
+        for (var j = 0; j < pts.length; j++) {
+            xs.push(pointFeatures(slice, pts[j], ref.dataRange));
+            labels.push(classes.indexOf(pts[j].c));
+        }
+        var net = nnCreate(NN_PATCH * NN_PATCH + 2, NN_HIDDEN, classes.length);
+        var loss = nnTrain(net, xs, labels, NN_EPOCHS, NN_LR);
+        layer.nn = { net: net, classes: classes, trainedZ: ref.z, count: pts.length, loss: loss };
+        showHint('Trained on ' + pts.length + ' points (z=' + ref.z + ', ' + classes.length +
+                 ' class' + (classes.length === 1 ? '' : 'es') + ', loss ' + loss.toFixed(3) + ').');
+        renderToolsPanel();
+    }
+
+    // Predict classes for the unclassified points of the current z plane
+    // only. The predicted class is assigned, so predicted points are colored
+    // per class and join their class file on export.
+    function predictUnclassified() {
+        var layer = activePointsLayer();
+        if (!layer || !layer.nn) {
+            errorHint('Train the classifier first.');
+            return;
+        }
+        var ref = referenceImageLayer();
+        if (!ref || !ref.slices || !ref.slices.has(ref.z)) {
+            errorHint('The current z slice of the image layer is not loaded yet.');
+            return;
+        }
+        var slice = ref.slices.get(ref.z);
+        var pts = currentZPoints(layer, ref.z).filter(function (p) { return !p.c; });
+        if (pts.length === 0) {
+            showHint('No unclassified points on z=' + ref.z + '.');
+            return;
+        }
+        var predicted = 0;
+        for (var i = 0; i < pts.length; i++) {
+            var fw = nnForward(layer.nn.net, pointFeatures(slice, pts[i], ref.dataRange));
+            var best = 0;
+            for (var k = 1; k < fw.probs.length; k++) {
+                if (fw.probs[k] > fw.probs[best]) best = k;
+            }
+            var c = layer.nn.classes[best];
+            if (layer.classCount && c > layer.classCount) c = layer.classCount;
+            pts[i].c = c;
+            predicted++;
+        }
+        draw();
+        renderToolsPanel();
+        showHint('Predicted ' + predicted + ' point' + (predicted === 1 ? '' : 's') + ' on z=' + ref.z + '.');
     }
 
     // ------------------------------------------------------------------
@@ -1506,6 +1796,9 @@
         el.additiveToggle = $('additiveSelectToggle');
         el.classCountInput = $('classCountInput');
         el.classColorList = $('classColorList');
+        el.nnTrain = $('nnTrainBtn');
+        el.nnPredict = $('nnPredictBtn');
+        el.nnStatus = $('nnStatus');
         if (!el.canvas || !el.layerList) return;
         ctx = el.canvas.getContext('2d');
 
