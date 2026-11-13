@@ -355,6 +355,12 @@ def read():
     return render_template('operations.html', groups=build_catalog(), active_category='readers')
 
 
+@app.route('/viewer')
+@login_required
+def viewer():
+    return render_template('viewer.html')
+
+
 @app.route('/operation/<operation>', methods=['GET', 'POST'])
 @login_required
 def operation_form(operation):

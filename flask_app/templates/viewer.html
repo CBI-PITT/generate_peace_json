@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+
+{% block title %}Viewer{% endblock %}
+
+{% block styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='styles/viewer.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="viewer-layout">
+    <aside class="viewer-panel card">
+        <div class="viewer-panel-header">
+            <span class="fw-semibold"><i class="bi bi-layers me-1"></i>Layers</span>
+            <span class="viewer-panel-count" id="layerCount"></span>
+        </div>
+        <div class="viewer-panel-body">
+            <div class="dropdown viewer-add-wrap">
+                <button type="button" class="btn btn-primary w-100" id="addLayerBtn"
+                        data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="bi bi-plus-lg me-1"></i>Add layer
+                </button>
+                <ul class="dropdown-menu viewer-add-menu" aria-labelledby="addLayerBtn">
+                    <li>
+                        <button type="button" class="dropdown-item viewer-add-layer" data-layer-type="image">
+                            <i class="bi bi-image me-2"></i>Image layer
+                        </button>
+                    </li>
+                    <li>
+                        <button type="button" class="dropdown-item viewer-add-layer" data-layer-type="points">
+                            <i class="bi bi-record-circle me-2"></i>Points layer
+                        </button>
+                    </li>
+                </ul>
+            </div>
+            <div id="layerList" class="viewer-layer-list"></div>
+            <div class="viewer-tools" id="viewerTools">
+                <div class="viewer-tools-header">
+                    <span class="fw-semibold"><i class="bi bi-tools me-1"></i>Tools</span>
+                </div>
+                <div class="viewer-tools-body">
+                    <div class="viewer-tools-note text-muted" id="toolsNote">Select a points layer to use its tools.</div>
+                    <div id="pointsTools" class="d-none">
+                        <div class="btn-group w-100 viewer-tool-group" role="group" aria-label="Point tools">
+                            <button type="button" class="btn btn-sm btn-outline-primary viewer-tool-toggle" id="toolAddPoints"
+                                    title="Add points &mdash; click on the canvas" aria-pressed="false">
+                                <i class="bi bi-plus-lg me-1"></i>Add
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-primary viewer-tool-toggle" id="toolSelectPoints"
+                                    title="Select points &mdash; click a point or drag a rectangle" aria-pressed="false">
+                                <i class="bi bi-cursor me-1"></i>Select
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-primary viewer-tool-toggle" id="toolClassifyPoints"
+                                    title="Classify &mdash; click a point to assign the next class" aria-pressed="false">
+                                <i class="bi bi-tags me-1"></i>Classify
+                            </button>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-danger w-100 viewer-tool-delete" id="toolDeleteSelected" disabled>
+                            <i class="bi bi-trash me-1"></i>Delete selected
+                        </button>
+                        <div class="viewer-tool-sub d-none" id="selectSubPanel">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" role="switch" id="additiveSelectToggle">
+                                <label class="form-check-label" for="additiveSelectToggle">Additive selection</label>
+                            </div>
+                            <div class="viewer-tools-hint text-muted">Click a point or drag a rectangle on the canvas.</div>
+                        </div>
+                        <div class="viewer-tool-sub d-none" id="classifySubPanel">
+                            <label class="viewer-classes-label" for="classCountInput">Classes
+                                <input type="number" class="form-control form-control-sm" id="classCountInput"
+                                       min="1" max="8" step="1" value="2">
+                            </label>
+                            <div id="classColorList" class="viewer-class-list"></div>
+                            <div class="btn-group w-100 viewer-nn-group" role="group" aria-label="Point classifier">
+                                <button type="button" class="btn btn-sm btn-outline-primary" id="nnTrainBtn"
+                                        title="Train on the manually classified points of the current z plane" disabled>
+                                    <i class="bi bi-cpu me-1"></i>Train
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-primary" id="nnPredictBtn"
+                                        title="Predict classes for unclassified and previously predicted points on the current z plane" disabled>
+                                    <i class="bi bi-magic me-1"></i>Predict
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-primary" id="nnResetBtn"
+                                        title="Revert predicted points on the current z plane to unclassified" disabled>
+                                    <i class="bi bi-arrow-counterclockwise me-1"></i>Reset
+                                </button>
+                            </div>
+                            <button type="button" class="btn btn-sm btn-outline-primary w-100 viewer-nn-group" id="nnApplyBtn"
+                                    title="Predict across all z planes that have points (may download one slice per plane &mdash; progress is shown)"
+                                    disabled>
+                                <i class="bi bi-stack me-1" id="nnApplyIcon"></i><span id="nnApplyText">Apply to all</span>
+                            </button>
+                            <div class="viewer-tools-hint text-muted" id="nnStatus">No model yet.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="viewer-panel-footer text-muted">
+            Scroll to zoom &middot; drag to pan &middot; double-click to fit
+        </div>
+    </aside>
+    <div class="viewer-stage card">
+        <div class="viewer-canvas-wrap" id="viewerCanvasWrap">
+            <canvas id="viewerCanvas" class="viewer-canvas"></canvas>
+            <div id="viewerHint" class="viewer-hint d-none"></div>
+            <div class="viewer-sliders">
+                <div class="viewer-slider-row d-none" id="zSliderRow">
+                    <label class="viewer-slider-label" for="zSlider">z</label>
+                    <input type="range" class="form-range" id="zSlider" min="0" max="0" step="1" value="0">
+                    <span class="viewer-slider-value" id="zValue">z: 0 / 0</span>
+                </div>
+                <div class="viewer-slider-row d-none" id="contrastRow">
+                    <label class="viewer-slider-label">contrast</label>
+                    <span class="viewer-slider-value" id="contrastMinValue">&ndash;</span>
+                    <div class="viewer-dual-range" id="contrastDual">
+                        <div class="viewer-dual-track"></div>
+                        <div class="viewer-dual-fill" id="contrastFill"></div>
+                        <input type="range" class="viewer-dual-input" id="contrastMinSlider" min="0" max="255" value="0" step="1">
+                        <input type="range" class="viewer-dual-input" id="contrastMaxSlider" min="0" max="255" value="255" step="1">
+                    </div>
+                    <span class="viewer-slider-value" id="contrastMaxValue">&ndash;</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<input type="hidden" id="viewer-image-path">
+<input type="hidden" id="viewer-points-path">
+{% endblock %}
+
+{% block scripts %}
+{{ super() }}
+{% include "browser_modal.html" %}
+<script src="{{ url_for('static', filename='viewer/vendor/geotiff.js') }}"></script>
+<script src="{{ url_for('static', filename='js/browser_picker.js') }}"></script>
+<script src="{{ url_for('static', filename='viewer/viewer.js') }}"></script>
+{% endblock %}

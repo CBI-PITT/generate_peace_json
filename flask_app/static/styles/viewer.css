@@ -1,0 +1,394 @@
+/* PEACE Viewer: kaibu-like layout — layer panel on the left, canvas stage on
+   the right. The layout breaks out of the base container for a full-width,
+   tall stage; this stylesheet is only linked from the Viewer page. */
+
+body.peace-body {
+    overflow-x: hidden;
+}
+
+.viewer-layout {
+    display: flex;
+    gap: 1rem;
+    height: calc(100vh - 210px);
+    min-height: 460px;
+    margin-inline: calc(50% - 50vw);
+}
+
+/* ---------- Left control panel ---------- */
+
+.viewer-panel {
+    flex: 0 0 300px;
+    min-width: 240px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.viewer-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: .75rem 1rem;
+    border-bottom: 1px solid var(--bs-border-color);
+}
+
+.viewer-panel-count {
+    color: var(--bs-secondary-color);
+    font-size: .8rem;
+}
+
+.viewer-panel-body {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    gap: .75rem;
+    padding: 1rem;
+    overflow-y: auto;
+}
+
+.viewer-panel-footer {
+    padding: .5rem 1rem;
+    border-top: 1px solid var(--bs-border-color);
+    font-size: .78rem;
+}
+
+.viewer-layer-list {
+    display: flex;
+    flex-direction: column;
+    gap: .3rem;
+}
+
+.viewer-layer-empty {
+    color: var(--bs-secondary-color);
+    font-size: .85rem;
+    padding: .35rem .1rem;
+}
+
+.viewer-layer-item {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    padding: .3rem .5rem;
+    border: 1px solid var(--bs-border-color);
+    border-radius: .375rem;
+    cursor: pointer;
+    background: transparent;
+}
+
+.viewer-layer-item:hover {
+    background: var(--bs-tertiary-bg);
+}
+
+.viewer-layer-item.active {
+    border-color: var(--bs-primary);
+    background: rgba(13, 110, 253, .08);
+}
+
+.viewer-layer-type {
+    flex: 0 0 auto;
+    color: var(--bs-secondary-color);
+}
+
+.viewer-layer-eye {
+    flex: 0 0 auto;
+    padding: .1rem .3rem;
+    line-height: 1;
+    color: var(--bs-body-color);
+}
+
+.viewer-layer-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: .88rem;
+}
+
+.viewer-layer-menu {
+    flex: 0 0 auto;
+}
+
+.viewer-layer-kebab {
+    padding: .1rem .3rem;
+    line-height: 1;
+    color: var(--bs-secondary-color);
+}
+
+/* ---------- Points tools panel ---------- */
+
+.viewer-tools {
+    border-top: 1px solid var(--bs-border-color);
+    padding-top: .75rem;
+}
+
+.viewer-tools-header {
+    font-size: .85rem;
+    color: var(--bs-body-color);
+    margin-bottom: .5rem;
+}
+
+.viewer-tools-note {
+    font-size: .82rem;
+    padding: .35rem .1rem;
+}
+
+.viewer-tool-group {
+    margin-bottom: .5rem;
+}
+
+.viewer-tool-toggle {
+    flex: 1 1 0;
+}
+
+.viewer-tool-sub {
+    margin-top: .6rem;
+    padding: .55rem .65rem;
+    border: 1px solid var(--bs-border-color);
+    border-radius: .375rem;
+    background: var(--bs-tertiary-bg);
+}
+
+.viewer-tools-hint {
+    font-size: .78rem;
+    margin-top: .35rem;
+    margin-bottom: 0;
+}
+
+.viewer-classes-label {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    font-size: .82rem;
+}
+
+.viewer-classes-label input {
+    width: 64px;
+}
+
+.viewer-class-list {
+    display: flex;
+    flex-direction: column;
+    gap: .25rem;
+    margin-top: .5rem;
+}
+
+.viewer-class-row {
+    display: flex;
+    align-items: center;
+    gap: .45rem;
+    font-size: .8rem;
+}
+
+.viewer-class-swatch {
+    flex: 0 0 auto;
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+    border: 1px solid rgba(0, 0, 0, .25);
+}
+
+.viewer-class-label {
+    flex: 1 1 auto;
+}
+
+.viewer-class-count-badge {
+    font-size: .78rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.viewer-class-pred-badge {
+    font-size: .72rem;
+    font-variant-numeric: tabular-nums;
+}
+
+.viewer-nn-group {
+    margin-top: .5rem;
+}
+
+/* Crosshair cursor while a points tool mode is active */
+.viewer-canvas-wrap.viewer-mode-add .viewer-canvas,
+.viewer-canvas-wrap.viewer-mode-select .viewer-canvas,
+.viewer-canvas-wrap.viewer-mode-classify .viewer-canvas {
+    cursor: crosshair;
+}
+
+/* ---------- Right canvas stage ---------- */
+
+.viewer-stage {
+    flex: 1 1 auto;
+    min-width: 0;
+    position: relative;
+    overflow: hidden;
+}
+
+.viewer-canvas-wrap {
+    position: absolute;
+    inset: 0;
+}
+
+.viewer-canvas {
+    position: absolute;
+    inset: 0;
+    cursor: grab;
+}
+
+.viewer-canvas.viewer-dragging {
+    cursor: grabbing;
+}
+
+.viewer-hint {
+    position: absolute;
+    top: .75rem;
+    left: 50%;
+    transform: translateX(-50%);
+    max-width: 92%;
+    padding: .3rem .8rem;
+    border-radius: .375rem;
+    font-size: .85rem;
+    z-index: 5;
+    pointer-events: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.viewer-hint-muted {
+    background: rgba(20, 24, 33, .85);
+    color: #e9ecef;
+}
+
+.viewer-hint-error {
+    background: rgba(220, 53, 69, .92);
+    color: #fff;
+}
+
+.viewer-sliders {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: 1rem;
+    width: min(680px, calc(100% - 2rem));
+    padding: .6rem 1rem;
+    border-radius: .5rem;
+    background: rgba(20, 24, 33, .85);
+    z-index: 5;
+}
+
+.viewer-slider-row {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+}
+
+.viewer-slider-row + .viewer-slider-row {
+    margin-top: .3rem;
+}
+
+.viewer-slider-label {
+    flex: 0 0 64px;
+    text-align: right;
+    font-size: .8rem;
+    color: #adb5bd;
+}
+
+.viewer-slider-value {
+    flex: 0 0 auto;
+    min-width: 64px;
+    text-align: center;
+    font-size: .8rem;
+    color: #e9ecef;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Dual-handle contrast slider: two stacked range inputs over one custom
+   track. The inputs pass pointer events through to their thumbs only, so
+   either handle can be dragged on the same track. */
+.viewer-dual-range {
+    position: relative;
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 1.25rem;
+}
+
+.viewer-dual-track {
+    position: absolute;
+    top: 50%;
+    left: 0;
+    right: 0;
+    height: 4px;
+    transform: translateY(-50%);
+    border-radius: 2px;
+    background: rgba(233, 236, 239, .35);
+}
+
+.viewer-dual-fill {
+    position: absolute;
+    top: 50%;
+    height: 4px;
+    transform: translateY(-50%);
+    border-radius: 2px;
+    background: #0d6efd;
+}
+
+.viewer-dual-input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    margin: 0;
+    appearance: none;
+    -webkit-appearance: none;
+    background: transparent;
+    pointer-events: none;
+    outline: none;
+}
+
+/* Stacking when the handles meet: JS raises the min handle's input when the
+   two thumbs touch so it stays grabbable. */
+#contrastMaxSlider { z-index: 4; }
+#contrastMinSlider { z-index: 3; }
+
+.viewer-dual-input:focus-visible {
+    outline: 2px solid rgba(13, 110, 253, .6);
+    outline-offset: 2px;
+}
+
+.viewer-dual-input::-webkit-slider-runnable-track {
+    background: transparent;
+    border: none;
+}
+
+.viewer-dual-input::-moz-range-track {
+    background: transparent;
+    border: none;
+}
+
+.viewer-dual-input::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    pointer-events: auto;
+    width: 14px;
+    height: 14px;
+    margin-top: 3px;
+    border-radius: 50%;
+    background: #fff;
+    border: 2px solid #0d6efd;
+    cursor: grab;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, .5);
+}
+
+.viewer-dual-input::-moz-range-thumb {
+    pointer-events: auto;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #fff;
+    border: 2px solid #0d6efd;
+    cursor: grab;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, .5);
+}
+
+.viewer-dual-input:active::-webkit-slider-thumb {
+    cursor: grabbing;
+}
+
+.viewer-dual-input:active::-moz-range-thumb {
+    cursor: grabbing;
+}
