@@ -33,6 +33,47 @@
                 </ul>
             </div>
             <div id="layerList" class="viewer-layer-list"></div>
+            <div class="viewer-tools" id="viewerTools">
+                <div class="viewer-tools-header">
+                    <span class="fw-semibold"><i class="bi bi-tools me-1"></i>Tools</span>
+                </div>
+                <div class="viewer-tools-body">
+                    <div class="viewer-tools-note text-muted" id="toolsNote">Select a points layer to use its tools.</div>
+                    <div id="pointsTools" class="d-none">
+                        <div class="btn-group w-100 viewer-tool-group" role="group" aria-label="Point tools">
+                            <button type="button" class="btn btn-sm btn-outline-primary viewer-tool-toggle" id="toolAddPoints"
+                                    title="Add points &mdash; click on the canvas" aria-pressed="false">
+                                <i class="bi bi-plus-lg me-1"></i>Add
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-primary viewer-tool-toggle" id="toolSelectPoints"
+                                    title="Select points &mdash; click a point or drag a rectangle" aria-pressed="false">
+                                <i class="bi bi-cursor me-1"></i>Select
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-primary viewer-tool-toggle" id="toolClassifyPoints"
+                                    title="Classify &mdash; click a point to assign the next class" aria-pressed="false">
+                                <i class="bi bi-tags me-1"></i>Classify
+                            </button>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-danger w-100 viewer-tool-delete" id="toolDeleteSelected" disabled>
+                            <i class="bi bi-trash me-1"></i>Delete selected
+                        </button>
+                        <div class="viewer-tool-sub d-none" id="selectSubPanel">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" role="switch" id="additiveSelectToggle">
+                                <label class="form-check-label" for="additiveSelectToggle">Additive selection</label>
+                            </div>
+                            <div class="viewer-tools-hint text-muted">Click a point or drag a rectangle on the canvas.</div>
+                        </div>
+                        <div class="viewer-tool-sub d-none" id="classifySubPanel">
+                            <label class="viewer-classes-label" for="classCountInput">Classes
+                                <input type="number" class="form-control form-control-sm" id="classCountInput"
+                                       min="1" max="8" step="1" value="2">
+                            </label>
+                            <div id="classColorList" class="viewer-class-list"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
         <div class="viewer-panel-footer text-muted">
             Scroll to zoom &middot; drag to pan &middot; double-click to fit

@@ -22,6 +22,20 @@
     var POINT_COLOR = '#ffdd00';
     var POINT_EDGE = 'rgba(20, 20, 20, 0.85)';
     var POINT_RADIUS = 3.5;
+    var CLASS_COLORS = [
+        '#ffdd00', // class 1: the default point color
+        '#3b82f6',
+        '#ef4444',
+        '#22d3ee',
+        '#f97316',
+        '#a855f7',
+        '#22c55e',
+        '#f472b6'
+    ];
+    var MAX_CLASSES = CLASS_COLORS.length;
+    var PICK_RADIUS = 6;   // screen px around a point that counts as a hit
+    var SELECT_RING = '#ffffff';
+    var CLICK_SLOP = 4;    // px of mouse movement separating a click from a drag
     var VIEW_BG = '#1a1f29';
     var MIN_SCALE = 0.001;
     var MAX_SCALE = 200;
@@ -31,6 +45,12 @@
     var nextLayerId = 1;
     var hintKind = 'default';
     var lastAdded = null;
+
+    // Points tools: one canvas interaction mode at a time. 'select' suspends
+    // panning (a drag draws the selection rectangle instead).
+    var canvasMode = 'none';   // 'none' | 'add' | 'select' | 'classify'
+    var rectDrag = null;       // rectangle select in progress: screen coords
+    var additiveSelect = false;
 
     var view = { scale: 1, tx: 0, ty: 0, fitted: false };
 
@@ -268,6 +288,149 @@
             points.push({ z: z, y: y, x: x });
         }
         return points;
+    }
+
+    // ------------------------------------------------------------------
+    // Points layer export (canonical napari-style CSV)
+    // ------------------------------------------------------------------
+
+    function downloadBlob(blob, filename) {
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        // Safari ignores the download attribute if the URL is revoked too early
+        setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    }
+
+    function pointsCsvName(name) {
+        var base = basename(name);
+        return /\.csv$/i.test(base) ? base : base + '.csv';
+    }
+
+    // Canonical napari-style CSV that round-trips through parsePointsCsv:
+    // 3-column layers (any z present) export header axis-0,axis-1,axis-2
+    // with z,y,x rows; 2-column layers export axis-0,axis-1 with y,x rows.
+    function pointsCsvText(coords) {
+        var hasZ = coords.some(function (p) { return p.z !== null; });
+        var lines = [hasZ ? 'axis-0,axis-1,axis-2' : 'axis-0,axis-1'];
+        for (var i = 0; i < coords.length; i++) {
+            var p = coords[i];
+            if (hasZ) {
+                lines.push((p.z === null ? '' : String(p.z)) + ',' + String(p.y) + ',' + String(p.x));
+            } else {
+                lines.push(String(p.y) + ',' + String(p.x));
+            }
+        }
+        return lines.join('\n') + '\n';
+    }
+
+    function exportPointsCsv(layer) {
+        if (!layer.coords || layer.coords.length === 0) {
+            errorHint('Nothing to export in ' + layer.name + '.');
+            return;
+        }
+        var groups = classifyExportGroups(layer);
+        if (groups) {
+            // classified layer with several classes: one <name>_classN.csv
+            // per non-empty class, in ascending class order (every point of
+            // a classified layer belongs to a class, default 1)
+            for (var g = 0; g < groups.length; g++) {
+                var blob = new Blob([pointsCsvText(groups[g].points)], { type: 'text/csv;charset=utf-8' });
+                downloadBlob(blob, classFileNameFor(layer.name, groups[g].k));
+            }
+            return;
+        }
+        var plain = new Blob([pointsCsvText(layer.coords)], { type: 'text/csv;charset=utf-8' });
+        downloadBlob(plain, pointsCsvName(layer.name));
+    }
+
+    // Strip a .csv/.CSV extension so a class suffix can be appended.
+    function pointsExportBase(name) {
+        return basename(name).replace(/\.csv$/i, '');
+    }
+
+    function classFileNameFor(name, k) {
+        return pointsExportBase(name) + '_class' + k + '.csv';
+    }
+
+    // Export groups for a classified layer: null when the layer has no
+    // classification or a single class (plain <name>.csv, no suffix);
+    // otherwise one {k, points} entry per non-empty class in ascending order.
+    function classifyExportGroups(layer) {
+        if (!layer.classified || (layer.classCount || 1) <= 1) return null;
+        var groups = [];
+        for (var k = 1; k <= layer.classCount; k++) {
+            var pts = layer.coords.filter(function (p) { return p.c === k; });
+            if (pts.length > 0) groups.push({ k: k, points: pts });
+        }
+        return groups.length ? groups : null;
+    }
+
+    // ------------------------------------------------------------------
+    // Points tools: pure helpers (pick, rect select, classify)
+    // ------------------------------------------------------------------
+
+    // 3-column points carry z and only participate on their plane; 2-column
+    // points (z null) always participate.
+    function pointEligible(p, viewZ) {
+        return p.z === null || viewZ === null || p.z === viewZ;
+    }
+
+    function classColor(c) {
+        return CLASS_COLORS[(c - 1) % CLASS_COLORS.length];
+    }
+
+    function pointFillColor(p) {
+        return p.c ? classColor(p.c) : POINT_COLOR;
+    }
+
+    // Class cycling: 1 -> 2 -> ... -> N -> 1 (wraps around); a point that
+    // was never classified starts at class 1.
+    function nextClass(c, classCount) {
+        var n = Math.max(1, classCount || 1);
+        if (!c || c < 1) return 1;
+        return (c % n) + 1;
+    }
+
+    // Nearest z-eligible point within `radius` screen px of (sx, sy);
+    // returns the index into coords or -1.
+    function pickPointIndex(coords, sx, sy, view, viewZ, radius) {
+        var best = -1;
+        var bestDist = radius * radius;
+        for (var i = 0; i < coords.length; i++) {
+            var p = coords[i];
+            if (!pointEligible(p, viewZ)) continue;
+            var px = view.tx + p.x * view.scale;
+            var py = view.ty + p.y * view.scale;
+            var dx = px - sx;
+            var dy = py - sy;
+            var d2 = dx * dx + dy * dy;
+            if (d2 <= bestDist) {
+                bestDist = d2;
+                best = i;
+            }
+        }
+        return best;
+    }
+
+    // Indices of z-eligible points inside the world-space rectangle
+    // (wx0, wy0) - (wx1, wy1).
+    function pointsInWorldRect(coords, wx0, wy0, wx1, wy1, viewZ) {
+        var loX = Math.min(wx0, wx1);
+        var hiX = Math.max(wx0, wx1);
+        var loY = Math.min(wy0, wy1);
+        var hiY = Math.max(wy0, wy1);
+        var hits = [];
+        for (var i = 0; i < coords.length; i++) {
+            var p = coords[i];
+            if (!pointEligible(p, viewZ)) continue;
+            if (p.x >= loX && p.x <= hiX && p.y >= loY && p.y <= hiY) hits.push(i);
+        }
+        return hits;
     }
 
     // ------------------------------------------------------------------
@@ -538,6 +701,7 @@
         view.fitted = false;  // refit to the new layer once its first slice loads
         renderLayerList();
         syncSliders();
+        renderToolsPanel();
         showHint('Loading ' + name + '…', 'loading');
         initImageLayer(layer, msg);
     }
@@ -586,14 +750,19 @@
                 return resp.text();
             })
             .then(function (text) {
-                var coords = parsePointsCsv(text);
+                var coords = parsePointsCsv(text).map(function (p) {
+                    return { z: p.z, y: p.y, x: p.x, c: null, sel: false };
+                });
                 if (coords.length === 0) throw new Error('no coordinate rows found');
                 var layer = makeLayer('points', name);
                 layer.coords = coords;
+                layer.classified = false;
+                layer.classCount = 2;
                 layers.push(layer);
                 activeLayerId = layer.id;
                 renderLayerList();
                 syncSliders();
+                renderToolsPanel();
                 draw();
             })
             .catch(function (err) {
@@ -610,6 +779,7 @@
         }
         renderLayerList();
         syncSliders();
+        renderToolsPanel();
         if (layers.length === 0) {
             view.fitted = false;
             view.scale = 1;
@@ -625,6 +795,7 @@
         activeLayerId = id;
         renderLayerList();
         syncSliders();
+        renderToolsPanel();
     }
 
     // ------------------------------------------------------------------
@@ -686,6 +857,20 @@
         kebab.appendChild(kebabIcon);
         var menu = document.createElement('ul');
         menu.className = 'dropdown-menu dropdown-menu-end';
+        if (layer.type === 'points') {
+            var exLi = document.createElement('li');
+            var ex = document.createElement('button');
+            ex.type = 'button';
+            ex.className = 'dropdown-item viewer-layer-export';
+            ex.dataset.action = 'export';
+            ex.title = 'Export layer as CSV';
+            var exIcon = document.createElement('i');
+            exIcon.className = 'bi bi-download me-2';
+            ex.appendChild(exIcon);
+            ex.appendChild(document.createTextNode('Export'));
+            exLi.appendChild(ex);
+            menu.appendChild(exLi);
+        }
         var li = document.createElement('li');
         var del = document.createElement('button');
         del.type = 'button';
@@ -719,6 +904,8 @@
                     layer.visible = !layer.visible;
                     renderLayerList();
                     draw();
+                } else if (actionEl.dataset.action === 'export') {
+                    exportPointsCsv(layer);
                 } else if (actionEl.dataset.action === 'delete') {
                     removeLayer(layer.id);
                 }
@@ -741,6 +928,219 @@
                 openFileBrowser(type === 'image' ? 'viewer-image-path' : 'viewer-points-path');
             });
         });
+    }
+
+    // ------------------------------------------------------------------
+    // Points tools panel
+    // ------------------------------------------------------------------
+
+    function activePointsLayer() {
+        var layer = layerById(activeLayerId);
+        return layer && layer.type === 'points' ? layer : null;
+    }
+
+    // Enabling classification assigns every point to class 1 by default.
+    function activateClassification(layer) {
+        layer.classified = true;
+        if (!layer.classCount) layer.classCount = 2;
+        for (var i = 0; i < layer.coords.length; i++) {
+            var p = layer.coords[i];
+            if (!p.c || p.c < 1) p.c = 1;
+            if (p.c > layer.classCount) p.c = layer.classCount;
+        }
+    }
+
+    function setCanvasMode(mode) {
+        // entering classify mode activates classification: every point is
+        // assigned to class 1 by default
+        if (mode === 'classify') {
+            var layer = activePointsLayer();
+            if (layer && !layer.classified) activateClassification(layer);
+        }
+        canvasMode = (canvasMode === mode) ? 'none' : mode;
+        rectDrag = null;
+        renderToolsPanel();
+        draw();
+    }
+
+    function renderToolsPanel() {
+        if (!el.toolsPanel) return;
+        var layer = activePointsLayer();
+        if (!layer) {
+            canvasMode = 'none';
+            rectDrag = null;
+            el.toolsNote.classList.remove('d-none');
+            el.pointsTools.classList.add('d-none');
+            el.canvasWrap.classList.remove('viewer-mode-add', 'viewer-mode-select', 'viewer-mode-classify');
+            return;
+        }
+        el.toolsNote.classList.add('d-none');
+        el.pointsTools.classList.remove('d-none');
+        el.toolAdd.classList.toggle('active', canvasMode === 'add');
+        el.toolSelect.classList.toggle('active', canvasMode === 'select');
+        el.toolClassify.classList.toggle('active', canvasMode === 'classify');
+        el.toolAdd.setAttribute('aria-pressed', canvasMode === 'add' ? 'true' : 'false');
+        el.toolSelect.setAttribute('aria-pressed', canvasMode === 'select' ? 'true' : 'false');
+        el.toolClassify.setAttribute('aria-pressed', canvasMode === 'classify' ? 'true' : 'false');
+        el.canvasWrap.classList.toggle('viewer-mode-add', canvasMode === 'add');
+        el.canvasWrap.classList.toggle('viewer-mode-select', canvasMode === 'select');
+        el.canvasWrap.classList.toggle('viewer-mode-classify', canvasMode === 'classify');
+        el.toolDelete.disabled = !layer.coords.some(function (p) { return p.sel; });
+        el.selectSubPanel.classList.toggle('d-none', canvasMode !== 'select');
+        el.classifySubPanel.classList.toggle('d-none', canvasMode !== 'classify');
+        if (canvasMode === 'classify') {
+            el.classCountInput.value = String(layer.classCount || 2);
+            renderClassColorList(layer);
+        }
+    }
+
+    // Per-class color chips with live point counts.
+    function renderClassColorList(layer) {
+        var wrap = el.classColorList;
+        wrap.textContent = '';
+        var n = layer.classCount || 1;
+        for (var k = 1; k <= n; k++) {
+            var count = 0;
+            for (var i = 0; i < layer.coords.length; i++) {
+                if (layer.coords[i].c === k) count++;
+            }
+            var row = document.createElement('div');
+            row.className = 'viewer-class-row';
+            var swatch = document.createElement('span');
+            swatch.className = 'viewer-class-swatch';
+            swatch.style.backgroundColor = classColor(k);
+            var label = document.createElement('span');
+            label.className = 'viewer-class-label';
+            label.textContent = 'class ' + k;
+            var badge = document.createElement('span');
+            badge.className = 'viewer-class-count-badge text-muted';
+            badge.textContent = String(count);
+            row.appendChild(swatch);
+            row.appendChild(label);
+            row.appendChild(badge);
+            wrap.appendChild(row);
+        }
+    }
+
+    function attachToolsEvents() {
+        if (!el.toolsPanel) return;
+        el.toolAdd.addEventListener('click', function () { setCanvasMode('add'); });
+        el.toolSelect.addEventListener('click', function () { setCanvasMode('select'); });
+        el.toolClassify.addEventListener('click', function () { setCanvasMode('classify'); });
+        el.toolDelete.addEventListener('click', deleteSelectedPoints);
+        el.additiveToggle.addEventListener('change', function () {
+            additiveSelect = el.additiveToggle.checked;
+        });
+        el.classCountInput.addEventListener('change', function () {
+            var layer = activePointsLayer();
+            if (!layer) return;
+            var n = clamp(parseInt(el.classCountInput.value, 10) || 2, 1, MAX_CLASSES);
+            layer.classCount = n;
+            el.classCountInput.value = String(n);
+            for (var i = 0; i < layer.coords.length; i++) {
+                var p = layer.coords[i];
+                if (p.c && p.c > n) p.c = n;
+            }
+            renderToolsPanel();
+        });
+    }
+
+    function clearSelection(layer) {
+        layer.coords.forEach(function (p) { p.sel = false; });
+        renderToolsPanel();
+    }
+
+    function deleteSelectedPoints() {
+        var layer = activePointsLayer();
+        if (!layer) return;
+        var before = layer.coords.length;
+        layer.coords = layer.coords.filter(function (p) { return !p.sel; });
+        if (layer.coords.length === before) return;
+        draw();
+        renderToolsPanel();
+    }
+
+    // Click with the add tool: append a point at the world-space click.
+    // z follows the reference image plane unless the layer is 2-column
+    // (every existing point has z null).
+    function addPointAtClick(cx, cy) {
+        var layer = activePointsLayer();
+        if (!layer) return;
+        var wx = (cx - view.tx) / view.scale;
+        var wy = (cy - view.ty) / view.scale;
+        var ref = referenceImageLayer();
+        var noZ = layer.coords.every(function (p) { return p.z === null; });
+        var z = noZ ? null : (ref ? ref.z : null);
+        layer.coords.push({ z: z, y: wy, x: wx, c: layer.classified ? 1 : null, sel: false });
+        draw();
+        renderToolsPanel();
+    }
+
+    function selectPointAtClick(cx, cy) {
+        var layer = activePointsLayer();
+        if (!layer) return;
+        var ref = referenceImageLayer();
+        var viewZ = ref ? ref.z : null;
+        var idx = pickPointIndex(layer.coords, cx, cy, view, viewZ, PICK_RADIUS);
+        if (idx === -1) {
+            if (!additiveSelect) clearSelection(layer);
+            draw();
+            return;
+        }
+        var p = layer.coords[idx];
+        if (additiveSelect) {
+            p.sel = !p.sel;
+        } else {
+            layer.coords.forEach(function (q) { q.sel = false; });
+            p.sel = true;
+        }
+        draw();
+        renderToolsPanel();
+    }
+
+    function classifyPointAtClick(cx, cy) {
+        var layer = activePointsLayer();
+        if (!layer || !layer.classified) return;
+        var ref = referenceImageLayer();
+        var viewZ = ref ? ref.z : null;
+        var idx = pickPointIndex(layer.coords, cx, cy, view, viewZ, PICK_RADIUS);
+        if (idx === -1) return;
+        var p = layer.coords[idx];
+        p.c = nextClass(p.c, layer.classCount);
+        draw();
+        renderToolsPanel();
+    }
+
+    // Finish a select-tool drag: a real drag selects every z-eligible point
+    // inside the screen rectangle; a click on empty canvas clears the
+    // selection unless additive mode is on.
+    function finishRectSelect() {
+        var rect = rectDrag;
+        rectDrag = null;
+        el.canvas.classList.remove('viewer-dragging');
+        var layer = activePointsLayer();
+        if (!rect || !layer) { draw(); return; }
+        var moved = Math.abs(rect.x1 - rect.x0) + Math.abs(rect.y1 - rect.y0);
+        var ref = referenceImageLayer();
+        var viewZ = ref ? ref.z : null;
+        if (moved <= CLICK_SLOP) {
+            if (!additiveSelect) clearSelection(layer);
+            draw();
+            return;
+        }
+        var wx0 = (rect.x0 - view.tx) / view.scale;
+        var wy0 = (rect.y0 - view.ty) / view.scale;
+        var wx1 = (rect.x1 - view.tx) / view.scale;
+        var wy1 = (rect.y1 - view.ty) / view.scale;
+        var hits = pointsInWorldRect(layer.coords, wx0, wy0, wx1, wy1, viewZ);
+        if (!additiveSelect) {
+            layer.coords.forEach(function (p) { p.sel = false; });
+        }
+        for (var h = 0; h < hits.length; h++) {
+            layer.coords[hits[h]].sel = true;
+        }
+        draw();
+        renderToolsPanel();
     }
 
     // ------------------------------------------------------------------
@@ -903,7 +1303,6 @@
 
     function drawPointsLayer(layer, viewZ) {
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        ctx.lineWidth = 1;
         for (var i = 0; i < layer.coords.length; i++) {
             var p = layer.coords[i];
             // napari convention: 3-column CSVs carry z (axis-0); points whose z
@@ -912,14 +1311,24 @@
             if (p.z !== null && viewZ !== null && p.z !== viewZ) continue;
             var sx = view.tx + p.x * view.scale;
             var sy = view.ty + p.y * view.scale;
-            if (sx < -POINT_RADIUS - 2 || sy < -POINT_RADIUS - 2 ||
-                sx > canvasW + POINT_RADIUS + 2 || sy > canvasH + POINT_RADIUS + 2) continue;
+            var margin = POINT_RADIUS + 3;  // ring extends past the point edge
+            if (sx < -margin || sy < -margin ||
+                sx > canvasW + margin || sy > canvasH + margin) continue;
             ctx.beginPath();
             ctx.arc(sx, sy, POINT_RADIUS, 0, Math.PI * 2);
-            ctx.fillStyle = POINT_COLOR;
+            ctx.fillStyle = pointFillColor(p);
             ctx.fill();
             ctx.strokeStyle = POINT_EDGE;
+            ctx.lineWidth = 1;
             ctx.stroke();
+            if (p.sel) {
+                // selected: white highlight ring around the point
+                ctx.beginPath();
+                ctx.arc(sx, sy, POINT_RADIUS + 2.5, 0, Math.PI * 2);
+                ctx.strokeStyle = SELECT_RING;
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+            }
         }
     }
 
@@ -940,6 +1349,17 @@
                 var ref = referenceImageLayer();
                 drawPointsLayer(layer, ref ? ref.z : null);
             }
+        }
+
+        // selection rectangle in progress (select tool drag)
+        if (rectDrag) {
+            ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+            ctx.strokeStyle = SELECT_RING;
+            ctx.lineWidth = 1;
+            ctx.setLineDash([4, 3]);
+            ctx.strokeRect(Math.min(rectDrag.x0, rectDrag.x1), Math.min(rectDrag.y0, rectDrag.y1),
+                           Math.abs(rectDrag.x1 - rectDrag.x0), Math.abs(rectDrag.y1 - rectDrag.y0));
+            ctx.setLineDash([]);
         }
 
         var ref = referenceImageLayer();
@@ -985,14 +1405,29 @@
         var dragging = false;
         var lastX = 0;
         var lastY = 0;
+        var mouseDown = null;  // {x, y, mode} of the press, canvas-relative
         el.canvas.addEventListener('mousedown', function (e) {
             if (e.button !== 0) return;
+            var rect = el.canvas.getBoundingClientRect();
+            mouseDown = { x: e.clientX - rect.left, y: e.clientY - rect.top, mode: canvasMode };
+            if (canvasMode === 'select') {
+                // the drag becomes a rectangle select; panning is suspended
+                rectDrag = { x0: mouseDown.x, y0: mouseDown.y, x1: mouseDown.x, y1: mouseDown.y };
+                return;
+            }
             dragging = true;
             lastX = e.clientX;
             lastY = e.clientY;
             el.canvas.classList.add('viewer-dragging');
         });
         window.addEventListener('mousemove', function (e) {
+            if (canvasMode === 'select' && rectDrag) {
+                var rect = el.canvas.getBoundingClientRect();
+                rectDrag.x1 = clamp(e.clientX - rect.left, 0, canvasW);
+                rectDrag.y1 = clamp(e.clientY - rect.top, 0, canvasH);
+                draw();
+                return;
+            }
             if (!dragging) return;
             view.tx += e.clientX - lastX;
             view.ty += e.clientY - lastY;
@@ -1000,9 +1435,25 @@
             lastY = e.clientY;
             draw();
         });
-        window.addEventListener('mouseup', function () {
+        window.addEventListener('mouseup', function (e) {
+            if (canvasMode === 'select' && rectDrag) {
+                mouseDown = null;
+                finishRectSelect();
+                return;
+            }
+            var down = mouseDown;
+            mouseDown = null;
             dragging = false;
             el.canvas.classList.remove('viewer-dragging');
+            if (!down) return;
+            var rect = el.canvas.getBoundingClientRect();
+            var cx = clamp(e.clientX - rect.left, 0, canvasW);
+            var cy = clamp(e.clientY - rect.top, 0, canvasH);
+            var moved = Math.abs(cx - down.x) + Math.abs(cy - down.y);
+            if (moved > CLICK_SLOP) return;  // a pan drag, not a click
+            if (down.mode === 'add') addPointAtClick(cx, cy);
+            else if (down.mode === 'select') selectPointAtClick(cx, cy);
+            else if (down.mode === 'classify') classifyPointAtClick(cx, cy);
         });
         el.canvas.addEventListener('dblclick', function (e) {
             e.preventDefault();
@@ -1043,6 +1494,18 @@
         el.contrastMinValue = $('contrastMinValue');
         el.contrastMaxValue = $('contrastMaxValue');
         el.contrastFill = $('contrastFill');
+        el.toolsPanel = $('viewerTools');
+        el.toolsNote = $('toolsNote');
+        el.pointsTools = $('pointsTools');
+        el.toolAdd = $('toolAddPoints');
+        el.toolSelect = $('toolSelectPoints');
+        el.toolClassify = $('toolClassifyPoints');
+        el.toolDelete = $('toolDeleteSelected');
+        el.selectSubPanel = $('selectSubPanel');
+        el.classifySubPanel = $('classifySubPanel');
+        el.additiveToggle = $('additiveSelectToggle');
+        el.classCountInput = $('classCountInput');
+        el.classColorList = $('classColorList');
         if (!el.canvas || !el.layerList) return;
         ctx = el.canvas.getContext('2d');
 
@@ -1056,9 +1519,11 @@
         renderLayerList();
         showDefaultHint();
         syncSliders();
+        renderToolsPanel();
         attachCanvasEvents();
         attachPanelEvents();
         attachSliderEvents();
+        attachToolsEvents();
     }
 
     if (document.readyState === 'loading') {

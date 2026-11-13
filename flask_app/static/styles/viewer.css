@@ -112,6 +112,95 @@ body.peace-body {
     color: var(--bs-secondary-color);
 }
 
+/* ---------- Points tools panel ---------- */
+
+.viewer-tools {
+    border-top: 1px solid var(--bs-border-color);
+    padding-top: .75rem;
+}
+
+.viewer-tools-header {
+    font-size: .85rem;
+    color: var(--bs-body-color);
+    margin-bottom: .5rem;
+}
+
+.viewer-tools-note {
+    font-size: .82rem;
+    padding: .35rem .1rem;
+}
+
+.viewer-tool-group {
+    margin-bottom: .5rem;
+}
+
+.viewer-tool-toggle {
+    flex: 1 1 0;
+}
+
+.viewer-tool-sub {
+    margin-top: .6rem;
+    padding: .55rem .65rem;
+    border: 1px solid var(--bs-border-color);
+    border-radius: .375rem;
+    background: var(--bs-tertiary-bg);
+}
+
+.viewer-tools-hint {
+    font-size: .78rem;
+    margin-top: .35rem;
+    margin-bottom: 0;
+}
+
+.viewer-classes-label {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    font-size: .82rem;
+}
+
+.viewer-classes-label input {
+    width: 64px;
+}
+
+.viewer-class-list {
+    display: flex;
+    flex-direction: column;
+    gap: .25rem;
+    margin-top: .5rem;
+}
+
+.viewer-class-row {
+    display: flex;
+    align-items: center;
+    gap: .45rem;
+    font-size: .8rem;
+}
+
+.viewer-class-swatch {
+    flex: 0 0 auto;
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+    border: 1px solid rgba(0, 0, 0, .25);
+}
+
+.viewer-class-label {
+    flex: 1 1 auto;
+}
+
+.viewer-class-count-badge {
+    font-size: .78rem;
+    font-variant-numeric: tabular-nums;
+}
+
+/* Crosshair cursor while a points tool mode is active */
+.viewer-canvas-wrap.viewer-mode-add .viewer-canvas,
+.viewer-canvas-wrap.viewer-mode-select .viewer-canvas,
+.viewer-canvas-wrap.viewer-mode-classify .viewer-canvas {
+    cursor: crosshair;
+}
+
 /* ---------- Right canvas stage ---------- */
 
 .viewer-stage {

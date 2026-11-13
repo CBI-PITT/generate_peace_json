@@ -4,7 +4,10 @@ The Viewer page (templates/viewer.html + static/viewer/viewer.js +
 static/styles/viewer.css) renders a kaibu-like layer panel + canvas viewer.
 It reuses the shared browser modal chain (browser_modal.html +
 browser_picker.js) and consumes the picker postMessage payloads keyed on the
-'viewer-image-path' / 'viewer-points-path' field ids.
+'viewer-image-path' / 'viewer-points-path' field ids. Points layers export
+their parsed coordinates through the kebab-menu Export entry as a canonical
+napari-style CSV and get a tools panel below the layer list (add / select /
+rectangle-select / classify / delete-selected points).
 """
 
 import pytest
@@ -134,6 +137,113 @@ def test_viewer_js_contracts():
         "dataset.bsToggle",
     ]:
         assert needle in js, f"viewer.js missing {needle}"
+
+
+def test_viewer_export_contracts():
+    js = VIEWER_JS.read_text()
+    for needle in [
+        # kebab menu: Export entry on points layers only (image layers stay
+        # Delete-only)
+        "layer.type === 'points'",
+        "viewer-layer-export",
+        "ex.dataset.action = 'export'",
+        "bi-download",
+        "'Export'",
+        # export handler in the delegated layer-list click listener
+        "actionEl.dataset.action === 'export'",
+        "exportPointsCsv(layer)",
+        # CSV writer + blob download
+        "downloadBlob",
+        "URL.createObjectURL",
+        "revokeObjectURL",
+        "new Blob(",
+        "text/csv;charset=utf-8",
+        # canonical napari headers that round-trip through parsePointsCsv:
+        # axis-0/axis-1/axis-2 = z,y,x for 3-col layers, axis-0/axis-1 = y,x
+        "hasZ ? 'axis-0,axis-1,axis-2' : 'axis-0,axis-1'",
+        "pointsCsvName",
+        "/\\.csv$/i",
+        # multi-class export: one <name>_classN.csv per non-empty class
+        # (single class or unclassified layers stay a plain <name>.csv)
+        "classifyExportGroups",
+        "classFileNameFor",
+        "pointsExportBase",
+        "pointsCsvText",
+    ]:
+        assert needle in js, f"viewer.js missing {needle}"
+
+
+def test_viewer_tools_contracts():
+    tpl = read_peace_template("viewer.html")
+    for needle in [
+        # tools panel below the layer list
+        'id="viewerTools"',
+        'id="toolsNote"',
+        'id="pointsTools"',
+        'id="toolAddPoints"',
+        'id="toolSelectPoints"',
+        'id="toolClassifyPoints"',
+        'id="toolDeleteSelected"',
+        'id="selectSubPanel"',
+        'id="additiveSelectToggle"',
+        'id="classifySubPanel"',
+        'id="classCountInput"',
+        'id="classColorList"',
+        'bi-tools',
+        'bi-cursor',
+        'bi-tags',
+        'Additive selection',
+        'viewer-tool-toggle',
+    ]:
+        assert needle in tpl, f"viewer.html missing {needle}"
+
+    js = VIEWER_JS.read_text()
+    for needle in [
+        # one canvas interaction mode at a time; select suspends panning
+        "var canvasMode = 'none'",
+        "canvasMode === 'select'",
+        "rectDrag",
+        "additiveSelect",
+        "setCanvasMode",
+        "renderToolsPanel",
+        "attachToolsEvents",
+        # point actions: add, pick, rect select, classify, delete
+        "addPointAtClick",
+        "selectPointAtClick",
+        "classifyPointAtClick",
+        "finishRectSelect",
+        "deleteSelectedPoints",
+        "clearSelection",
+        "activateClassification",
+        "activePointsLayer",
+        # pure helpers
+        "pickPointIndex",
+        "pointsInWorldRect",
+        "pointEligible",
+        "nextClass",
+        "pointFillColor",
+        # classification: all points default to class 1; class cycling wraps
+        "layer.classified = true",
+        "p.c = nextClass(p.c, layer.classCount)",
+        "CLASS_COLORS",
+        "MAX_CLASSES",
+        # rendering: class colors + selected highlight ring + rect overlay
+        "SELECT_RING",
+        "setLineDash([4, 3])",
+        "POINT_RADIUS + 2.5",
+        "viewer-mode-select",
+    ]:
+        assert needle in js, f"viewer.js missing {needle}"
+
+    css = VIEWER_CSS.read_text()
+    for needle in [
+        ".viewer-tools",
+        ".viewer-tool-sub",
+        ".viewer-class-swatch",
+        ".viewer-class-row",
+        ".viewer-mode-select .viewer-canvas",
+    ]:
+        assert needle in css, f"viewer.css missing {needle}"
 
 
 def test_viewer_css_contracts():
