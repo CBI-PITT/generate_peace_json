@@ -390,9 +390,12 @@
     // ------------------------------------------------------------------
 
     // 3-column points carry z and only participate on their plane; 2-column
-    // points (z null) always participate.
+    // points (z null) always participate. Point z values are continuous
+    // coordinates from the source CSV (registration/resampling steps like
+    // 0.5 or 0.666 of a plane), so they are snapped to the nearest image
+    // plane for every comparison.
     function pointEligible(p, viewZ) {
-        return p.z === null || viewZ === null || p.z === viewZ;
+        return p.z === null || viewZ === null || Math.round(p.z) === viewZ;
     }
 
     function classColor(c) {
@@ -1025,6 +1028,21 @@
         el.nnTrain.disabled = !hasManual || nnTraining;
         el.nnPredict.disabled = !layer.nn || nnTraining;
         el.nnReset.disabled = !hasPredicted || nnTraining;
+        // Apply-to-all: needs a model and a predictable point on some z
+        // plane; doubles as the Stop control while the pass runs.
+        var hasApply = false;
+        if (ref) {
+            hasApply = layer.coords.some(function (p) {
+                return p.z !== null && (!p.c || p.pred) && p.z >= 0 && p.z < ref.zCount;
+            });
+        }
+        if (nnRunMode === 'predict-all') {
+            setApplyButton(true);
+            el.nnApply.disabled = nnStopRequested;
+        } else {
+            setApplyButton(false);
+            el.nnApply.disabled = !layer.nn || !hasApply || nnTraining;
+        }
         if (!ref) {
             el.nnStatus.textContent = 'Load an image layer — the training patches come from its slices.';
         } else if (layer.nn) {
@@ -1120,6 +1138,10 @@
         el.nnTrain.addEventListener('click', trainClassifier);
         el.nnPredict.addEventListener('click', predictUnclassified);
         el.nnReset.addEventListener('click', resetPredicted);
+        el.nnApply.addEventListener('click', function () {
+            if (nnRunMode === 'predict-all') stopPredictAll();
+            else predictAllZ();
+        });
     }
 
     function clearSelection(layer) {
@@ -1236,7 +1258,10 @@
     var NN_EPOCHS = 150;    // full-batch training epochs
     var NN_LR = 0.05;       // Adam learning rate
     var NN_NO_MODEL_TEXT = 'No model yet — classify some points, then Train.';
-    var nnTraining = false; // true while an async training pass is running
+    var nnTraining = false;      // true while an async training/prediction pass runs
+    var nnRunMode = null;        // 'train' | 'predict-all' while a pass is running
+    var nnStopRequested = false; // Stop clicked during a predict-all pass
+    var nnAbort = null;          // aborts the in-flight slice fetch of the pass
 
     // Points that participate on a z plane: 3-column points whose z matches
     // the plane plus every 2-column point (z null).
@@ -1255,6 +1280,18 @@
     function nnZLabel(zs) {
         if (zs.length <= 3) return 'z=' + zs.join(',');
         return zs.length + ' z-planes';
+    }
+
+    // The first slice decoded by a pass initializes the shared data range,
+    // exactly like ensureSlice does, so features are normalized identically
+    // across z planes.
+    function initSliceRange(ref, slice) {
+        if (ref.dataRange) return;
+        ref.dataRange = computeRange(slice);
+        ref.float = !Number.isInteger(ref.dataRange.min) || !Number.isInteger(ref.dataRange.max);
+        ref.contrastDomain = contrastDomain(slice, ref.dataRange);
+        ref.contrast = { min: ref.dataRange.min, max: ref.dataRange.max };
+        if (sliderImageLayer() === ref) syncSliders();
     }
 
     // Feature vector for one point from the decoded raw slice: a normalized
@@ -1412,7 +1449,7 @@
         var skipped = 0;
         var pts = manualTrainingPoints(layer);
         for (var i = 0; i < pts.length; i++) {
-            var z = pts[i].z === null ? ref.z : pts[i].z;  // 2-col points train on the current plane
+            var z = pts[i].z === null ? ref.z : Math.round(pts[i].z);  // 2-col points train on the current plane
             if (z === null || z < 0 || z >= ref.zCount) {
                 skipped++;
                 continue;
@@ -1424,6 +1461,9 @@
             return;
         }
         nnTraining = true;
+        nnRunMode = 'train';
+        nnStopRequested = false;
+        nnAbort = new AbortController();
         renderToolsPanel();
         showHint('Training on ' + usable.length + ' points…');
         try {
@@ -1450,17 +1490,9 @@
                     continue;
                 }
                 try {
-                    var ctrl = new AbortController();
-                    var slice = await readSliceRaw(ref, sz, ctrl.signal);
+                    var slice = await readSliceRaw(ref, sz, nnAbort.signal);
                     slices[sz] = slice;
-                    if (!ref.dataRange) {
-                        // first decoded slice initializes the shared range
-                        ref.dataRange = computeRange(slice);
-                        ref.float = !Number.isInteger(ref.dataRange.min) || !Number.isInteger(ref.dataRange.max);
-                        ref.contrastDomain = contrastDomain(slice, ref.dataRange);
-                        ref.contrast = { min: ref.dataRange.min, max: ref.dataRange.max };
-                        if (sliderImageLayer() === ref) syncSliders();
-                    }
+                    initSliceRange(ref, slice);
                 } catch (err) {
                     // a slice that fails to load skips its points
                     skipped += usable.filter(function (entry) { return entry.z === sz; }).length;
@@ -1510,6 +1542,9 @@
             renderToolsPanel();
         } finally {
             nnTraining = false;
+            nnRunMode = null;
+            nnStopRequested = false;
+            nnAbort = null;
             renderToolsPanel();
         }
     }
@@ -1574,6 +1609,127 @@
         renderToolsPanel();
         var zLabel = viewZ === null ? '' : ' on z=' + viewZ;
         showHint('Reset ' + reset + ' predicted point' + (reset === 1 ? '' : 's') + zLabel + '.');
+    }
+
+    // Predict across every z plane that has predictable points (instead of
+    // the current plane only). Each plane's slice is loaded on demand;
+    // progress is shown per plane and the pass can be stopped mid-way
+    // (already predicted points keep their classes). 2-column points (z
+    // null) are "on every plane" and stay with the regular Predict — a
+    // per-plane pass would re-assign them once per z.
+    async function predictAllZ() {
+        if (nnTraining) return;
+        var layer = activePointsLayer();
+        if (!layer || !layer.nn) {
+            errorHint('Train the classifier first.');
+            return;
+        }
+        var ref = referenceImageLayer();
+        if (!ref) {
+            errorHint('Load an image layer first — prediction needs its slices.');
+            return;
+        }
+        var byZ = {};
+        var count = 0;
+        for (var i = 0; i < layer.coords.length; i++) {
+            var p = layer.coords[i];
+            if (p.z === null || (p.c && !p.pred)) continue;  // z-null + manual stay out
+            var pz = Math.round(p.z);  // continuous CSV z -> nearest image plane
+            if (pz < 0 || pz >= ref.zCount) continue;
+            if (!byZ[pz]) byZ[pz] = [];
+            byZ[pz].push(p);
+            count++;
+        }
+        if (count === 0) {
+            showHint('No points to predict across the stack.');
+            return;
+        }
+        var zs = [];
+        for (var key in byZ) zs.push(Number(key));
+        zs.sort(function (a, b) { return a - b; });
+        nnTraining = true;
+        nnRunMode = 'predict-all';
+        nnStopRequested = false;
+        nnAbort = new AbortController();
+        renderToolsPanel();
+        var predicted = 0;
+        var skipped = 0;
+        var donePlanes = 0;
+        var stopped = false;
+        try {
+            for (var zi = 0; zi < zs.length; zi++) {
+                var z = zs[zi];
+                var slice = ref.slices ? ref.slices.get(z) : null;
+                if (!slice) {
+                    try {
+                        slice = await readSliceRaw(ref, z, nnAbort.signal);
+                        initSliceRange(ref, slice);
+                    } catch (err) {
+                        if (err && err.name === 'AbortError') {
+                            stopped = true;  // Stop clicked mid-fetch
+                            break;
+                        }
+                        skipped += byZ[z].length;  // slice failed to load
+                        continue;
+                    }
+                }
+                var pts = byZ[z];
+                for (var t = 0; t < pts.length; t++) {
+                    var fw = nnForward(layer.nn.net, pointFeatures(slice, pts[t], ref.dataRange));
+                    var best = 0;
+                    for (var k = 1; k < fw.probs.length; k++) {
+                        if (fw.probs[k] > fw.probs[best]) best = k;
+                    }
+                    var c = layer.nn.classes[best];
+                    if (layer.classCount && c > layer.classCount) c = layer.classCount;
+                    pts[t].c = c;
+                    pts[t].pred = true;
+                    predicted++;
+                }
+                donePlanes = zi + 1;
+                // progress after each plane (hint + status line + repaint)
+                showHint('Predicting… ' + donePlanes + '/' + zs.length + ' planes · ' + predicted + ' points');
+                el.nnStatus.textContent = 'Predicting… ' + donePlanes + '/' + zs.length + ' planes';
+                draw();
+                if (nnStopRequested) {
+                    stopped = true;
+                    break;
+                }
+            }
+        } finally {
+            nnTraining = false;
+            nnRunMode = null;
+            nnStopRequested = false;
+            nnAbort = null;
+            renderToolsPanel();
+        }
+        if (!layerById(layer.id)) return;  // layer was deleted mid-pass
+        if (stopped || donePlanes < zs.length) {
+            draw();  // repaint so already-predicted cells are visible after Stop
+            showHint('Stopped — predicted ' + predicted + ' point' + (predicted === 1 ? '' : 's') +
+                     ' across ' + donePlanes + '/' + zs.length + ' planes.');
+            return;
+        }
+        var note = skipped > 0 ? ' Skipped ' + skipped + ' point' + (skipped === 1 ? '' : 's') + '.' : '';
+        showHint('Predicted ' + predicted + ' point' + (predicted === 1 ? '' : 's') + ' across ' +
+                 nnZLabel(zs) + '.' + note);
+        draw();
+        renderToolsPanel();
+    }
+
+    // Stop click during a predict-all pass: abort the in-flight slice fetch
+    // and break at the next plane boundary (predicted points keep classes).
+    function stopPredictAll() {
+        if (nnRunMode !== 'predict-all') return;
+        nnStopRequested = true;
+        if (nnAbort) nnAbort.abort();
+    }
+
+    // Apply-to-all doubles as the Stop control while a prediction pass runs.
+    function setApplyButton(running) {
+        if (!el.nnApplyIcon || !el.nnApplyText) return;
+        el.nnApplyIcon.className = 'bi ' + (running ? 'bi-stop-circle' : 'bi-stack') + ' me-1';
+        el.nnApplyText.textContent = running ? 'Stop' : 'Apply to all';
     }
 
     // ------------------------------------------------------------------
@@ -1738,10 +1894,10 @@
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
         for (var i = 0; i < layer.coords.length; i++) {
             var p = layer.coords[i];
-            // napari convention: 3-column CSVs carry z (axis-0); points whose z
-            // differs from the current plane are hidden. 2-column points show
-            // on every plane.
-            if (p.z !== null && viewZ !== null && p.z !== viewZ) continue;
+            // napari convention: 3-column CSVs carry z (axis-0); points whose
+            // snapped plane differs from the current plane are hidden.
+            // 2-column points show on every plane.
+            if (!pointEligible(p, viewZ)) continue;
             var sx = view.tx + p.x * view.scale;
             var sy = view.ty + p.y * view.scale;
             var margin = POINT_RADIUS + 3;  // ring extends past the point edge
@@ -1950,6 +2106,9 @@
         el.nnTrain = $('nnTrainBtn');
         el.nnPredict = $('nnPredictBtn');
         el.nnReset = $('nnResetBtn');
+        el.nnApply = $('nnApplyBtn');
+        el.nnApplyIcon = $('nnApplyIcon');
+        el.nnApplyText = $('nnApplyText');
         el.nnStatus = $('nnStatus');
         if (!el.canvas || !el.layerList) return;
         ctx = el.canvas.getContext('2d');

@@ -198,6 +198,9 @@ def test_viewer_tools_contracts():
         'id="nnTrainBtn"',
         'id="nnPredictBtn"',
         'id="nnResetBtn"',
+        'id="nnApplyBtn"',
+        'id="nnApplyIcon"',
+        'id="nnApplyText"',
         'id="nnStatus"',
         'bi-tools',
         'bi-cursor',
@@ -205,6 +208,8 @@ def test_viewer_tools_contracts():
         'bi-cpu',
         'bi-magic',
         'bi-arrow-counterclockwise',
+        'bi-stack',
+        'Apply to all',
         'Additive selection',
         'viewer-tool-toggle',
     ]:
@@ -235,6 +240,10 @@ def test_viewer_tools_contracts():
         "pointEligible",
         "nextClass",
         "pointFillColor",
+        # continuous CSV z values (registration/resampling steps like 0.5 or
+        # 0.666 of a plane) snap to the nearest image plane for rendering,
+        # picking, and every train/predict comparison
+        "Math.round(p.z)",
         # classification: points start unclassified; the first click assigns
         # class 1 and cycling wraps N -> 1
         "layer.classified = true",
@@ -271,6 +280,12 @@ def test_viewer_tools_contracts():
         "pred = true",
         "pred = false",
         "resetPredicted",
+        # apply-to-all: cross-z prediction pass with per-plane progress and a
+        # Stop control (the Apply button doubles as Stop while it runs)
+        "predictAllZ",
+        "stopPredictAll",
+        "nnRunMode",
+        "initSliceRange",
         # rendering: class colors + selected highlight ring + rect overlay
         "SELECT_RING",
         "setLineDash([4, 3])",
