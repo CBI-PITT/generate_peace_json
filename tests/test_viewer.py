@@ -243,10 +243,15 @@ def test_viewer_tools_contracts():
         "MAX_CLASSES",
         "UNCLASSIFIED_COLOR",
         # in-browser classifier: features = 10x10 intensity patch + coords,
-        # tiny MLP (softmax + Adam), train/predict on the current z plane
+        # tiny MLP (softmax + Adam); training uses the manually classified
+        # points of every z plane (patches from each point's own slice,
+        # loaded on demand), prediction runs on the current z plane only
         "trainClassifier",
         "predictUnclassified",
         "currentZPoints",
+        "manualTrainingPoints",
+        "readSliceRaw",
+        "nnZLabel",
         "pointFeatures",
         "NN_PATCH",
         "nnCreate",
@@ -255,6 +260,8 @@ def test_viewer_tools_contracts():
         "adamUpdate",
         "layer.nn",
         "updateNnControls",
+        "nnTraining",
+        "trainedZs",
         # iterative loop: per-point provenance flag — training uses only
         # manually classified points, predict targets unclassified + previously
         # predicted points, clicking makes a point manual, Reset reverts

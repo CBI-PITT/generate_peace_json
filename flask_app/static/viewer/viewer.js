@@ -1007,26 +1007,29 @@
     }
 
     // Train/Predict/Reset button state + model status line in the classify
-    // sub-panel: Train needs a manually classified point on the current z
-    // plane (predicted points do not count), Reset needs a predicted point,
-    // Predict needs a trained model.
+    // sub-panel: Train needs a manually classified point anywhere in the
+    // stack (its slice is loaded on demand), Reset needs a predicted point
+    // on the current z plane, Predict needs a trained model. All three are
+    // disabled while an async training pass is running.
     function updateNnControls(layer) {
         var ref = referenceImageLayer();
-        var sliceReady = !!(ref && ref.slices && ref.slices.has(ref.z));
-        var hasManual = false;
         var hasPredicted = false;
-        if (sliceReady) {
-            var zPts = currentZPoints(layer, ref.z);
-            hasManual = zPts.some(function (p) { return p.c && !p.pred; });
-            hasPredicted = zPts.some(function (p) { return p.pred; });
+        if (ref) {
+            hasPredicted = currentZPoints(layer, ref.z).some(function (p) { return p.pred; });
         }
-        el.nnTrain.disabled = !hasManual;
-        el.nnPredict.disabled = !layer.nn;
-        el.nnReset.disabled = !hasPredicted;
-        if (!sliceReady) {
-            el.nnStatus.textContent = 'Load an image layer and wait for the current slice to decode.';
+        var hasManual = manualTrainingPoints(layer).some(function (p) {
+            if (!ref) return false;
+            if (p.z === null) return true;  // trains on the current plane
+            return ref.zCount > 0 && p.z >= 0 && p.z < ref.zCount;
+        });
+        el.nnTrain.disabled = !hasManual || nnTraining;
+        el.nnPredict.disabled = !layer.nn || nnTraining;
+        el.nnReset.disabled = !hasPredicted || nnTraining;
+        if (!ref) {
+            el.nnStatus.textContent = 'Load an image layer — the training patches come from its slices.';
         } else if (layer.nn) {
-            el.nnStatus.textContent = 'Model: z=' + layer.nn.trainedZ + ' · ' + layer.nn.count +
+            var zLabel = layer.nn.trainedZs && layer.nn.trainedZs.length ? nnZLabel(layer.nn.trainedZs) : '';
+            el.nnStatus.textContent = 'Model: ' + zLabel + ' · ' + layer.nn.count +
                 ' points · loss ' + layer.nn.loss.toFixed(3);
         } else {
             el.nnStatus.textContent = NN_NO_MODEL_TEXT;
@@ -1225,19 +1228,33 @@
     // Points classifier: tiny MLP trained in the browser
     // ------------------------------------------------------------------
 
-    // The classifier uses only the current z plane (for now): training data
-    // are the classified points on the reference image plane, prediction
-    // runs on the unclassified points of the same plane.
+    // Training data are the manually classified points of every z plane
+    // (each point's intensity patch comes from its own slice, loaded on
+    // demand); prediction runs on the current z plane only.
     var NN_PATCH = 10;      // 10x10 intensity patch around a point
     var NN_HIDDEN = 24;     // hidden layer width
     var NN_EPOCHS = 150;    // full-batch training epochs
     var NN_LR = 0.05;       // Adam learning rate
-    var NN_NO_MODEL_TEXT = 'No model yet — classify some points on this z plane, then Train.';
+    var NN_NO_MODEL_TEXT = 'No model yet — classify some points, then Train.';
+    var nnTraining = false; // true while an async training pass is running
 
     // Points that participate on a z plane: 3-column points whose z matches
     // the plane plus every 2-column point (z null).
     function currentZPoints(layer, viewZ) {
         return layer.coords.filter(function (p) { return pointEligible(p, viewZ); });
+    }
+
+    // Manually classified points across all z planes (predicted points only
+    // join after they are clicked).
+    function manualTrainingPoints(layer) {
+        return layer.coords.filter(function (p) { return p.c && !p.pred; });
+    }
+
+    // Compact label for a set of z planes: "z=3,5" for a few, "N z-planes"
+    // once the list grows long.
+    function nnZLabel(zs) {
+        if (zs.length <= 3) return 'z=' + zs.join(',');
+        return zs.length + ' z-planes';
     }
 
     // Feature vector for one point from the decoded raw slice: a normalized
@@ -1374,48 +1391,127 @@
         return loss / n;
     }
 
-    // Train on the manually classified points of the current z plane
-    // (predicted points only join after they are clicked). Features come
-    // from the reference image layer's decoded slice (intensity patch +
-    // coordinates); the model is stored on the layer until re-trained.
-    function trainClassifier() {
+    // Train on the manually classified points of every z plane (predicted
+    // points only join after they are clicked). Each point's intensity patch
+    // comes from its own z slice: cached slices are reused, missing ones are
+    // fetched + decoded on demand, and points whose z is outside the image
+    // stack are skipped. Prediction still runs on the current z plane only.
+    async function trainClassifier() {
+        if (nnTraining) return;
         var layer = activePointsLayer();
         if (!layer || !layer.classified) {
             errorHint('Enter Classify mode and assign some classes first.');
             return;
         }
         var ref = referenceImageLayer();
-        if (!ref || !ref.slices || !ref.slices.has(ref.z)) {
-            errorHint('The current z slice of the image layer is not loaded yet.');
+        if (!ref) {
+            errorHint('Load an image layer first — the training patches come from its slices.');
             return;
         }
-        var slice = ref.slices.get(ref.z);
-        var pts = currentZPoints(layer, ref.z).filter(function (p) { return p.c && !p.pred; });
-        if (pts.length === 0) {
-            errorHint('No manually classified points on z=' + ref.z + ' — click points with the Classify tool first.');
-            return;
-        }
-        var classSet = {};
-        var classes = [];
+        var usable = [];
+        var skipped = 0;
+        var pts = manualTrainingPoints(layer);
         for (var i = 0; i < pts.length; i++) {
-            var c = pts[i].c;
-            if (!classSet[c]) {
-                classSet[c] = true;
-                classes.push(c);
+            var z = pts[i].z === null ? ref.z : pts[i].z;  // 2-col points train on the current plane
+            if (z === null || z < 0 || z >= ref.zCount) {
+                skipped++;
+                continue;
             }
+            usable.push({ point: pts[i], z: z });
         }
-        var xs = [];
-        var labels = [];
-        for (var j = 0; j < pts.length; j++) {
-            xs.push(pointFeatures(slice, pts[j], ref.dataRange));
-            labels.push(classes.indexOf(pts[j].c));
+        if (usable.length === 0) {
+            errorHint('No manually classified points — click points with the Classify tool first.');
+            return;
         }
-        var net = nnCreate(NN_PATCH * NN_PATCH + 2, NN_HIDDEN, classes.length);
-        var loss = nnTrain(net, xs, labels, NN_EPOCHS, NN_LR);
-        layer.nn = { net: net, classes: classes, trainedZ: ref.z, count: pts.length, loss: loss };
-        showHint('Trained on ' + pts.length + ' points (z=' + ref.z + ', ' + classes.length +
-                 ' class' + (classes.length === 1 ? '' : 'es') + ', loss ' + loss.toFixed(3) + ').');
+        nnTraining = true;
         renderToolsPanel();
+        showHint('Training on ' + usable.length + ' points…');
+        try {
+            // unique z values with manual points, ascending
+            var zSeen = {};
+            var zs = [];
+            for (var u = 0; u < usable.length; u++) {
+                var uz = usable[u].z;
+                if (!zSeen[uz]) {
+                    zSeen[uz] = true;
+                    zs.push(uz);
+                }
+            }
+            zs.sort(function (a, b) { return a - b; });
+
+            // resolve one slice per z: cached ones are reused, the rest are
+            // fetched + decoded now (large stacks may download several
+            // slices, one per annotated z)
+            var slices = {};
+            for (var s = 0; s < zs.length; s++) {
+                var sz = zs[s];
+                if (ref.slices && ref.slices.has(sz)) {
+                    slices[sz] = ref.slices.get(sz);
+                    continue;
+                }
+                try {
+                    var ctrl = new AbortController();
+                    var slice = await readSliceRaw(ref, sz, ctrl.signal);
+                    slices[sz] = slice;
+                    if (!ref.dataRange) {
+                        // first decoded slice initializes the shared range
+                        ref.dataRange = computeRange(slice);
+                        ref.float = !Number.isInteger(ref.dataRange.min) || !Number.isInteger(ref.dataRange.max);
+                        ref.contrastDomain = contrastDomain(slice, ref.dataRange);
+                        ref.contrast = { min: ref.dataRange.min, max: ref.dataRange.max };
+                        if (sliderImageLayer() === ref) syncSliders();
+                    }
+                } catch (err) {
+                    // a slice that fails to load skips its points
+                    skipped += usable.filter(function (entry) { return entry.z === sz; }).length;
+                }
+            }
+            if (!layerById(layer.id)) return;  // layer was deleted mid-training
+
+            var entries = usable.filter(function (entry) { return !!slices[entry.z]; });
+            if (entries.length === 0) {
+                errorHint('Failed to load the slices needed for training.');
+                return;
+            }
+            var classSet = {};
+            var classes = [];
+            for (var c2 = 0; c2 < entries.length; c2++) {
+                var cv = entries[c2].point.c;
+                if (!classSet[cv]) {
+                    classSet[cv] = true;
+                    classes.push(cv);
+                }
+            }
+            var xs = [];
+            var labels = [];
+            for (var t = 0; t < entries.length; t++) {
+                var entry = entries[t];
+                xs.push(pointFeatures(slices[entry.z], entry.point, ref.dataRange));
+                labels.push(classes.indexOf(entry.point.c));
+            }
+            var net = nnCreate(NN_PATCH * NN_PATCH + 2, NN_HIDDEN, classes.length);
+            var loss = nnTrain(net, xs, labels, NN_EPOCHS, NN_LR);
+            var trainedZs = [];
+            var zSeenT = {};
+            for (var t2 = 0; t2 < entries.length; t2++) {
+                var ez = entries[t2].z;
+                if (!zSeenT[ez]) {
+                    zSeenT[ez] = true;
+                    trainedZs.push(ez);
+                }
+            }
+            trainedZs.sort(function (a, b) { return a - b; });
+            layer.nn = { net: net, classes: classes, trainedZs: trainedZs,
+                         count: entries.length, loss: loss };
+            var skipNote = skipped > 0 ? ' Skipped ' + skipped + ' point' + (skipped === 1 ? '' : 's') + '.' : '';
+            showHint('Trained on ' + entries.length + ' points (' + nnZLabel(trainedZs) + ', ' + classes.length +
+                     ' class' + (classes.length === 1 ? '' : 'es') + ', loss ' + loss.toFixed(3) + ').' + skipNote);
+            draw();
+            renderToolsPanel();
+        } finally {
+            nnTraining = false;
+            renderToolsPanel();
+        }
     }
 
     // Predict classes for the not-manually-classified points of the current
