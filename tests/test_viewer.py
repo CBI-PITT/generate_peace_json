@@ -197,12 +197,14 @@ def test_viewer_tools_contracts():
         'id="classColorList"',
         'id="nnTrainBtn"',
         'id="nnPredictBtn"',
+        'id="nnResetBtn"',
         'id="nnStatus"',
         'bi-tools',
         'bi-cursor',
         'bi-tags',
         'bi-cpu',
         'bi-magic',
+        'bi-arrow-counterclockwise',
         'Additive selection',
         'viewer-tool-toggle',
     ]:
@@ -253,6 +255,15 @@ def test_viewer_tools_contracts():
         "adamUpdate",
         "layer.nn",
         "updateNnControls",
+        # iterative loop: per-point provenance flag — training uses only
+        # manually classified points, predict targets unclassified + previously
+        # predicted points, clicking makes a point manual, Reset reverts
+        "p.pred",
+        "p.c && !p.pred",
+        "!p.c || p.pred",
+        "pred = true",
+        "pred = false",
+        "resetPredicted",
         # rendering: class colors + selected highlight ring + rect overlay
         "SELECT_RING",
         "setLineDash([4, 3])",
@@ -267,6 +278,7 @@ def test_viewer_tools_contracts():
         ".viewer-tool-sub",
         ".viewer-class-swatch",
         ".viewer-class-row",
+        ".viewer-class-pred-badge",
         ".viewer-nn-group",
         ".viewer-mode-select .viewer-canvas",
     ]:

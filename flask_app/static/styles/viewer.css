@@ -194,6 +194,11 @@ body.peace-body {
     font-variant-numeric: tabular-nums;
 }
 
+.viewer-class-pred-badge {
+    font-size: .72rem;
+    font-variant-numeric: tabular-nums;
+}
+
 .viewer-nn-group {
     margin-top: .5rem;
 }

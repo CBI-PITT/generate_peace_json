@@ -72,12 +72,16 @@
                             <div id="classColorList" class="viewer-class-list"></div>
                             <div class="btn-group w-100 viewer-nn-group" role="group" aria-label="Point classifier">
                                 <button type="button" class="btn btn-sm btn-outline-primary" id="nnTrainBtn"
-                                        title="Train on the classified points of the current z plane" disabled>
+                                        title="Train on the manually classified points of the current z plane" disabled>
                                     <i class="bi bi-cpu me-1"></i>Train
                                 </button>
                                 <button type="button" class="btn btn-sm btn-outline-primary" id="nnPredictBtn"
-                                        title="Predict classes for unclassified points on the current z plane" disabled>
+                                        title="Predict classes for unclassified and previously predicted points on the current z plane" disabled>
                                     <i class="bi bi-magic me-1"></i>Predict
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-primary" id="nnResetBtn"
+                                        title="Revert predicted points on the current z plane to unclassified" disabled>
+                                    <i class="bi bi-arrow-counterclockwise me-1"></i>Reset
                                 </button>
                             </div>
                             <div class="viewer-tools-hint text-muted" id="nnStatus">No model yet.</div>

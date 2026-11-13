@@ -766,7 +766,7 @@
             })
             .then(function (text) {
                 var coords = parsePointsCsv(text).map(function (p) {
-                    return { z: p.z, y: p.y, x: p.x, c: null, sel: false };
+                    return { z: p.z, y: p.y, x: p.x, c: null, pred: false, sel: false };
                 });
                 if (coords.length === 0) throw new Error('no coordinate rows found');
                 var layer = makeLayer('points', name);
@@ -1006,18 +1006,23 @@
         }
     }
 
-    // Train/Predict button state + model status line in the classify
-    // sub-panel: Train needs a classified point on the current z plane,
+    // Train/Predict/Reset button state + model status line in the classify
+    // sub-panel: Train needs a manually classified point on the current z
+    // plane (predicted points do not count), Reset needs a predicted point,
     // Predict needs a trained model.
     function updateNnControls(layer) {
         var ref = referenceImageLayer();
         var sliceReady = !!(ref && ref.slices && ref.slices.has(ref.z));
-        var hasClassified = false;
+        var hasManual = false;
+        var hasPredicted = false;
         if (sliceReady) {
-            hasClassified = currentZPoints(layer, ref.z).some(function (p) { return p.c; });
+            var zPts = currentZPoints(layer, ref.z);
+            hasManual = zPts.some(function (p) { return p.c && !p.pred; });
+            hasPredicted = zPts.some(function (p) { return p.pred; });
         }
-        el.nnTrain.disabled = !hasClassified;
+        el.nnTrain.disabled = !hasManual;
         el.nnPredict.disabled = !layer.nn;
+        el.nnReset.disabled = !hasPredicted;
         if (!sliceReady) {
             el.nnStatus.textContent = 'Load an image layer and wait for the current slice to decode.';
         } else if (layer.nn) {
@@ -1055,8 +1060,12 @@
         var n = layer.classCount || 1;
         for (var k = 1; k <= n; k++) {
             var count = 0;
+            var predCount = 0;
             for (var i = 0; i < layer.coords.length; i++) {
-                if (layer.coords[i].c === k) count++;
+                var p = layer.coords[i];
+                if (p.c !== k) continue;
+                if (p.pred) predCount++;
+                else count++;
             }
             var row = document.createElement('div');
             row.className = 'viewer-class-row';
@@ -1069,9 +1078,17 @@
             var badge = document.createElement('span');
             badge.className = 'viewer-class-count-badge text-muted';
             badge.textContent = String(count);
+            badge.title = 'Manually classified points (training data)';
             row.appendChild(swatch);
             row.appendChild(label);
             row.appendChild(badge);
+            if (predCount > 0) {
+                var predBadge = document.createElement('span');
+                predBadge.className = 'viewer-class-pred-badge text-muted';
+                predBadge.textContent = predCount + ' pred';
+                predBadge.title = 'Predicted points in this class';
+                row.appendChild(predBadge);
+            }
             wrap.appendChild(row);
         }
     }
@@ -1099,6 +1116,7 @@
         });
         el.nnTrain.addEventListener('click', trainClassifier);
         el.nnPredict.addEventListener('click', predictUnclassified);
+        el.nnReset.addEventListener('click', resetPredicted);
     }
 
     function clearSelection(layer) {
@@ -1128,7 +1146,7 @@
         var noZ = layer.coords.every(function (p) { return p.z === null; });
         var z = noZ ? null : (ref ? ref.z : null);
         // new points start unclassified too (click to assign a class)
-        layer.coords.push({ z: z, y: wy, x: wx, c: null, sel: false });
+        layer.coords.push({ z: z, y: wy, x: wx, c: null, pred: false, sel: false });
         draw();
         renderToolsPanel();
     }
@@ -1163,7 +1181,10 @@
         var idx = pickPointIndex(layer.coords, cx, cy, view, viewZ, PICK_RADIUS);
         if (idx === -1) return;
         var p = layer.coords[idx];
+        // a clicked point is manually classified from now on (joins the
+        // next training set even when it was predicted before)
         p.c = nextClass(p.c, layer.classCount);
+        p.pred = false;
         draw();
         renderToolsPanel();
     }
@@ -1353,7 +1374,8 @@
         return loss / n;
     }
 
-    // Train on the classified points of the current z plane. Features come
+    // Train on the manually classified points of the current z plane
+    // (predicted points only join after they are clicked). Features come
     // from the reference image layer's decoded slice (intensity patch +
     // coordinates); the model is stored on the layer until re-trained.
     function trainClassifier() {
@@ -1368,9 +1390,9 @@
             return;
         }
         var slice = ref.slices.get(ref.z);
-        var pts = currentZPoints(layer, ref.z).filter(function (p) { return p.c; });
+        var pts = currentZPoints(layer, ref.z).filter(function (p) { return p.c && !p.pred; });
         if (pts.length === 0) {
-            errorHint('No classified points on z=' + ref.z + ' — click points with the Classify tool first.');
+            errorHint('No manually classified points on z=' + ref.z + ' — click points with the Classify tool first.');
             return;
         }
         var classSet = {};
@@ -1396,9 +1418,10 @@
         renderToolsPanel();
     }
 
-    // Predict classes for the unclassified points of the current z plane
-    // only. The predicted class is assigned, so predicted points are colored
-    // per class and join their class file on export.
+    // Predict classes for the not-manually-classified points of the current
+    // z plane only: never-classified points plus previously predicted ones
+    // (so iterations re-predict with the improved model). Manually
+    // classified points are never overwritten.
     function predictUnclassified() {
         var layer = activePointsLayer();
         if (!layer || !layer.nn) {
@@ -1411,9 +1434,9 @@
             return;
         }
         var slice = ref.slices.get(ref.z);
-        var pts = currentZPoints(layer, ref.z).filter(function (p) { return !p.c; });
+        var pts = currentZPoints(layer, ref.z).filter(function (p) { return !p.c || p.pred; });
         if (pts.length === 0) {
-            showHint('No unclassified points on z=' + ref.z + '.');
+            showHint('No points to predict on z=' + ref.z + '.');
             return;
         }
         var predicted = 0;
@@ -1426,11 +1449,35 @@
             var c = layer.nn.classes[best];
             if (layer.classCount && c > layer.classCount) c = layer.classCount;
             pts[i].c = c;
+            pts[i].pred = true;
             predicted++;
         }
         draw();
         renderToolsPanel();
         showHint('Predicted ' + predicted + ' point' + (predicted === 1 ? '' : 's') + ' on z=' + ref.z + '.');
+    }
+
+    // Revert the predicted (not manually classified) points of the current
+    // z plane back to unclassified, e.g. to start over with a fresh model.
+    function resetPredicted() {
+        var layer = activePointsLayer();
+        if (!layer) return;
+        var ref = referenceImageLayer();
+        var viewZ = ref ? ref.z : null;
+        var reset = 0;
+        for (var i = 0; i < layer.coords.length; i++) {
+            var p = layer.coords[i];
+            if (p.pred && pointEligible(p, viewZ)) {
+                p.c = null;
+                p.pred = false;
+                reset++;
+            }
+        }
+        if (reset === 0) return;
+        draw();
+        renderToolsPanel();
+        var zLabel = viewZ === null ? '' : ' on z=' + viewZ;
+        showHint('Reset ' + reset + ' predicted point' + (reset === 1 ? '' : 's') + zLabel + '.');
     }
 
     // ------------------------------------------------------------------
@@ -1606,11 +1653,19 @@
                 sx > canvasW + margin || sy > canvasH + margin) continue;
             ctx.beginPath();
             ctx.arc(sx, sy, POINT_RADIUS, 0, Math.PI * 2);
-            ctx.fillStyle = pointFillColor(p);
-            ctx.fill();
-            ctx.strokeStyle = POINT_EDGE;
-            ctx.lineWidth = 1;
-            ctx.stroke();
+            if (p.pred && p.c) {
+                // predicted: hollow ring in the class color (manual points
+                // are solid) so the two are distinguishable on the canvas
+                ctx.strokeStyle = classColor(p.c);
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            } else {
+                ctx.fillStyle = pointFillColor(p);
+                ctx.fill();
+                ctx.strokeStyle = POINT_EDGE;
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            }
             if (p.sel) {
                 // selected: white highlight ring around the point
                 ctx.beginPath();
@@ -1798,6 +1853,7 @@
         el.classColorList = $('classColorList');
         el.nnTrain = $('nnTrainBtn');
         el.nnPredict = $('nnPredictBtn');
+        el.nnReset = $('nnResetBtn');
         el.nnStatus = $('nnStatus');
         if (!el.canvas || !el.layerList) return;
         ctx = el.canvas.getContext('2d');
