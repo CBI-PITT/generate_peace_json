@@ -2,9 +2,13 @@
 //
 // Layers (bottom -> top in add order):
 // - image: a standalone .tif/.tiff file or a folder of tiffs (z-stack). Slices
-//   are fetched and decoded lazily, one plane at a time, through the file
-//   browser blueprint (/browser/dir/ serves file bytes, /browser/dir_json/
-//   lists folder contents). A multi-page single TIFF also acts as a z-stack.
+//   are fetched and decoded lazily through the file browser blueprint
+//   (/browser/dir/ serves file bytes with HTTP range support, /browser/dir_json/
+//   lists folder contents). TIFFs are opened via GeoTIFF.fromUrl, so tiled
+//   tiffs transfer only the tiles the current view needs (206 range requests);
+//   zoomed-in views additionally read only the visible window of each plane.
+//   Single-strip uncompressed tiffs fall back to whole-plane reads — the
+//   atomic unit is the strip. A multi-page single TIFF also acts as a z-stack.
 // - points: a CSV with napari-like coordinates — header columns 'axis-0' /
 //   'axis-1' / 'axis-2' or 'z' / 'y' / 'x' (3 columns overlay the z-stack,
 //   2 columns are a 2D image), falling back to positional z,y,x / y,x order.
@@ -19,6 +23,12 @@
 
     var SLICE_CACHE_MAX = 8;   // decoded raw slices kept per image layer
     var PAINT_CACHE_MAX = 8;   // rendered (contrast-applied) canvases per layer
+    // Windowed reads: zoomed-in views (the plane does not fit the viewport)
+    // read only the visible window of a plane; tiled tiffs then fetch only
+    // the tiles the window intersects. The window is quantized to a fixed
+    // grid so small pans/zooms reuse the same cache entry.
+    var TILE_GRID = 512;             // quantization grid (px), matches 512px tiles
+    var SLICE_CACHE_BYTES = 400 * 1024 * 1024;  // raw 16-bit + painted RGBA estimate
     var POINT_EDGE = 'rgba(20, 20, 20, 0.85)';
     var POINT_RADIUS = 3.5;
     var CLASS_COLORS = [
@@ -89,6 +99,30 @@
         while (map.size > max) {
             map.delete(map.keys().next().value);
         }
+    }
+
+    // Slice cache key: the plain z for a full-plane read, 'z@x0,y0,x1,y1'
+    // for a windowed read (bounds quantized to the tile grid upstream).
+    // Full-plane entries keep integer keys, matching the classifier code
+    // that looks slices up by z.
+    function sliceKey(z, win) {
+        if (!win) return z;
+        return z + '@' + win[0] + ',' + win[1] + ',' + win[2] + ',' + win[3];
+    }
+
+    // The z of a slice cache key (full-plane integer keys and 'z@...' keys).
+    function keyZ(key) {
+        var s = String(key);
+        var at = s.indexOf('@');
+        return at === -1 ? Number(s) : Number(s.slice(0, at));
+    }
+
+    // An AbortError-shaped error: the viewer treats these as cancellation
+    // (no failed mark, no error hint — the next draw retries).
+    function abortedError(msg) {
+        var e = new Error(msg || 'aborted');
+        e.name = 'AbortError';
+        return e;
     }
 
     // The embed picker's nextBrowserPath is either '/browser/dir_embed/<root>/...'
@@ -461,9 +495,12 @@
     //   attached as properties on the array itself
     // - other shapes: {width, height, data} where data is a TypedArray
     //   (interleaved) or an array of planes (planar)
-    function normalizeRasters(image, rasters) {
-        var width = image.getWidth();
-        var height = image.getHeight();
+    // sliceW/sliceH are the dims of the requested read (full plane or window);
+    // they are authoritative — a windowed read must not inherit the full
+    // image dims from image.getWidth()/getHeight().
+    function normalizeRasters(image, rasters, sliceW, sliceH) {
+        var width = sliceW || image.getWidth();
+        var height = sliceH || image.getHeight();
         var sppMeta = image.getSamplesPerPixel();
         if (Array.isArray(rasters)) {
             return { width: width, height: height, spp: Math.max(1, rasters.length), interleaved: false, data: rasters };
@@ -487,22 +524,84 @@
         return { width: width, height: height, spp: 1, interleaved: false, data: [rasters.data] };
     }
 
-    async function readSliceRaw(layer, z, signal) {
+    // Read one z plane (full or windowed) from the layer's tiff source.
+    // The browser blueprint serves file bytes with HTTP range support, so
+    // geotiff fetches only the IFD plus the strips/tiles the read needs (206
+    // partial responses). Folder mode opens a FRESH geotiff source per read:
+    // geotiff 2.0.4's block bookkeeping is not abort-safe, and a source
+    // poisoned by an aborted read makes every later read of that plane fail
+    // with "Block X is not in the block requests" (verified on real tiled
+    // data) — a fresh source per read keeps aborts clean. File mode keeps one
+    // source (its page IFDs are expensive to re-fetch) but re-opens it after
+    // any aborted read (ensureSlice drops layer.tiff on cancellation).
+    // readRasters is called WITHOUT an abort signal on purpose: aborting a
+    // geotiff read mid-flight corrupts its block bookkeeping ("Block X is not
+    // in the block requests"). Instead the slice's own abort flag is checked
+    // AFTER the source opens (before the big window transfer starts) and
+    // again after the read — a superseded slice wastes only its header bytes
+    // and its result is discarded, so the source stays healthy and every
+    // slice settles. `window` is [x0, y0, x1, y1] in image pixels (top-left
+    // origin) or null for a full-plane read.
+    async function readSliceRaw(layer, z, signal, window) {
         var image;
         if (layer.mode === 'file') {
+            if (!layer.tiff) {
+                layer.tiff = await GeoTIFF.fromUrl(layer.fileUrl);
+            }
             image = await layer.tiff.getImage(z);
         } else {
-            var resp = await fetch(layer.urls[z], { signal: signal });
-            if (!resp.ok) throw new Error('HTTP ' + resp.status);
-            var buf = await resp.arrayBuffer();
-            var tiff = await GeoTIFF.fromArrayBuffer(buf);
+            var tiff = await GeoTIFF.fromUrl(layer.urls[z]);
             image = await tiff.getImage(0);
         }
-        var width = image.getWidth();
-        var height = image.getHeight();
-        if (width <= 0 || height <= 0) throw new Error('image has no pixels');
-        var rasters = await image.readRasters();
-        return normalizeRasters(image, rasters);
+        // superseded while the source was opening: bail out before the big
+        // window transfer starts (only the header bytes were wasted)
+        if (signal && signal.aborted) {
+            throw abortedError('slice superseded while opening');
+        }
+        var fullWidth = image.getWidth();
+        var fullHeight = image.getHeight();
+        if (fullWidth <= 0 || fullHeight <= 0) throw new Error('image has no pixels');
+        // storage format for the performance hint: a single strip is the
+        // atomic unit of every read, so zoomed views cannot fetch less than
+        // the whole image (tiled files read per-tile instead)
+        if (!layer.singleStrip) {
+            var fd = image.getFileDirectory();
+            var tiled = fd.TileWidth !== undefined && fd.TileWidth !== null;
+            if (!tiled && (fd.StripOffsets || []).length === 1) layer.singleStrip = true;
+        }
+        var win = null;
+        if (window) {
+            win = [
+                clamp(Math.floor(window[0]), 0, fullWidth),
+                clamp(Math.floor(window[1]), 0, fullHeight),
+                clamp(Math.ceil(window[2]), 0, fullWidth),
+                clamp(Math.ceil(window[3]), 0, fullHeight)
+            ];
+            if (win[2] <= win[0] || win[3] <= win[1]) win = null;
+        }
+        var width;
+        var height;
+        var rasters;
+        if (win) {
+            width = win[2] - win[0];
+            height = win[3] - win[1];
+            rasters = await image.readRasters({ window: win });
+        } else {
+            width = fullWidth;
+            height = fullHeight;
+            rasters = await image.readRasters();
+        }
+        // superseded while reading: discard the result (the caller re-requests)
+        if (signal && signal.aborted) {
+            throw abortedError('slice superseded while reading');
+        }
+        var slice = normalizeRasters(image, rasters, width, height);
+        slice.ox = win ? win[0] : 0;
+        slice.oy = win ? win[1] : 0;
+        slice.fullWidth = fullWidth;
+        slice.fullHeight = fullHeight;
+        slice.bytes = width * height * 6;  // raw 16-bit + painted RGBA estimate
+        return slice;
     }
 
     function computeRange(slice) {
@@ -601,70 +700,117 @@
         return canvas;
     }
 
-    function paintSlice(layer, z) {
-        var raw = layer.slices.get(z);
+    function paintSlice(layer, key) {
+        var raw = layer.slices.get(key);
         if (!raw) return;
         var canvas = renderSliceCanvas(raw, layer.contrast.min, layer.contrast.max);
-        setLru(layer.paint, z, { canvas: canvas, cmin: layer.contrast.min, cmax: layer.contrast.max }, cacheCap(layer));
+        setLru(layer.paint, key, { canvas: canvas, cmin: layer.contrast.min, cmax: layer.contrast.max,
+                                   ox: raw.ox || 0, oy: raw.oy || 0 }, cacheCap(layer));
     }
 
     // Cache caps: a count-based cap would hold ~1GB for 4067x5119 16-bit
-    // slices (raw + painted RGBA), so the cap is derived from a byte budget
-    // per layer once the slice dimensions are known.
-    var SLICE_CACHE_BYTES = 400 * 1024 * 1024;
+    // slices (raw + painted RGBA), so the painted-cache cap is derived from a
+    // byte budget per layer once the slice dimensions are known.
     function cacheCap(layer) {
         if (!layer.sliceBytes) return SLICE_CACHE_MAX;
         return Math.max(2, Math.min(SLICE_CACHE_MAX, Math.floor(SLICE_CACHE_BYTES / layer.sliceBytes)));
     }
 
+    // Slice cache eviction: a byte budget shared by full-plane and windowed
+    // slices (each entry carries its own approximate size), with a small
+    // floor so the current view always fits.
+    function setSliceCache(layer, key, slice) {
+        if (layer.slices.has(key)) layer.slices.delete(key);
+        layer.slices.set(key, slice);
+        var total = 0;
+        layer.slices.forEach(function (s) { total += (s.bytes || 0); });
+        while (total > SLICE_CACHE_BYTES && layer.slices.size > 2) {
+            var oldestKey = layer.slices.keys().next().value;
+            var oldest = layer.slices.get(oldestKey);
+            total -= (oldest.bytes || 0);
+            layer.slices.delete(oldestKey);
+        }
+    }
+
     // Abort in-flight slice fetches for other z positions: dragging the z
     // slider across a large stack would otherwise queue a 40MB+ download per
-    // position it passes.
+    // position it passes. Keys carry their z (full-plane integer keys and
+    // 'z@...' windowed keys), so windowed entries are covered too.
     function abortStaleSliceFetches(layer, keepZ) {
         if (!layer.inflight) return;
-        layer.inflight.forEach(function (ctrl, z) {
-            if (z !== keepZ) {
-                layer.inflight.delete(z);
+        layer.inflight.forEach(function (ctrl, key) {
+            if (keyZ(key) !== keepZ) {
+                layer.inflight.delete(key);
                 ctrl.abort();
             }
         });
     }
 
-    // Lazily fetch + decode one z plane, then render it with the current
-    // contrast window. In-flight requests are deduplicated per layer, and
-    // failed slices are never auto-retried (a draw()/fitView() pass would
-    // otherwise re-trigger the fetch forever and freeze the page).
-    function ensureSlice(layer, z) {
-        if (layer.failed.has(z) || layer.slices.has(z) || layer.loading.has(z)) return;
-        layer.loading.set(z, true);
+    // Abort stale WINDOWED fetches of one z whose view window no longer
+    // matches (a pan/zoom crossed a quantization grid boundary). Full-plane
+    // fetches of the same z are kept — they initialize the contrast range
+    // and serve fit-view.
+    function abortStaleWindowFetches(layer, z, keepKey) {
+        if (!layer.inflight) return;
+        layer.inflight.forEach(function (ctrl, key) {
+            if (key === keepKey) return;
+            var s = String(key);
+            if (s.indexOf('@') === -1) return;  // full-plane fetch: keep
+            if (keyZ(key) !== z) return;        // other z: z-slider logic aborts these
+            layer.inflight.delete(key);
+            ctrl.abort();
+        });
+    }
+
+    // Lazily fetch + decode one z plane (full or windowed), then render it
+    // with the current contrast window. In-flight requests are deduplicated
+    // per layer and cache key, and failed slices are never auto-retried (a
+    // draw()/fitView() pass would otherwise re-trigger the fetch forever and
+    // freeze the page). The contrast range is initialized from a full-plane
+    // read only — a windowed read would estimate the range from the window.
+    function ensureSlice(layer, z, window) {
+        var key = sliceKey(z, window);
+        if (layer.failed.has(key) || layer.slices.has(key) || layer.loading.has(key)) return;
+        layer.loading.set(key, true);
         var ctrl = new AbortController();
-        layer.inflight.set(z, ctrl);
-        readSliceRaw(layer, z, ctrl.signal)
+        layer.inflight.set(key, ctrl);
+        readSliceRaw(layer, z, ctrl.signal, window)
             .then(function (slice) {
+                if (!layer.fullWidth) {
+                    layer.fullWidth = slice.fullWidth;
+                    layer.fullHeight = slice.fullHeight;
+                }
                 if (!layer.sliceBytes) {
-                    layer.sliceBytes = slice.width * slice.height * 6;  // raw 16-bit + painted RGBA
+                    layer.sliceBytes = layer.fullWidth * layer.fullHeight * 6;  // raw 16-bit + painted RGBA
                 }
-                if (!layer.dataRange) {
-                    layer.dataRange = computeRange(slice);
-                    layer.float = !Number.isInteger(layer.dataRange.min) || !Number.isInteger(layer.dataRange.max);
-                    layer.contrastDomain = contrastDomain(slice, layer.dataRange);
-                    layer.contrast = { min: layer.dataRange.min, max: layer.dataRange.max };
-                    if (sliderImageLayer() === layer) syncSliders();
+                if (!layer.dataRange && !window) initSliceRange(layer, slice);
+                if (layer.singleStrip && !layer.formatHintShown) {
+                    layer.formatHintShown = true;
+                    showHint('This TIFF is stored as a single strip — zoomed-in views still download the ' +
+                             'whole image. Convert with "Compressed and tiled tiffs" for fast zooming.', 'muted');
                 }
-                setLru(layer.slices, z, slice, cacheCap(layer));
+                setSliceCache(layer, key, slice);
             })
-            .then(function () { paintSlice(layer, z); })
+            .then(function () { paintSlice(layer, key); })
             .catch(function (err) {
-                if (err && err.name === 'AbortError') {
-                    // canceled in favor of another slice: not a failure
+                // Cancellation must never mark the slice failed: the slice's
+                // own abort, geotiff's abort-induced block-request corruption
+                // ("Block X is not in the block requests"), or any error while
+                // the slice's abort flag is set are all retryable — the next
+                // draw re-requests the slice and the image recovers. File mode
+                // re-opens its shared tiff source, which an aborted read can
+                // leave in a bad state.
+                if ((err && err.name === 'AbortError') || ctrl.signal.aborted ||
+                    (err && String(err.message).indexOf('is not in the block requests') !== -1)) {
+                    if (layer.mode === 'file') layer.tiff = null;
                     return;
                 }
-                layer.failed.add(z);
+                layer.failed.add(key);
                 showHint('Failed to load slice ' + z + ' of ' + layer.name + ': ' + err.message, 'error');
             })
             .finally(function () {
-                layer.inflight.delete(z);
-                layer.loading.delete(z);
+                layer.inflight.delete(key);
+                layer.loading.delete(key);
                 if (layer.z === z && layer.visible) {
                     if (!view.fitted) fitView();
                     else draw();
@@ -709,8 +855,13 @@
         layer.loading = new Map();
         layer.failed = new Set();
         layer.inflight = new Map();
+        layer.fileUrl = null;  // file mode: the layer's own tif URL (re-open after aborts)
         layer.ready = false;  // flipped once the tiff/pages or folder listing resolve
-        layer.sliceBytes = 0; // approximate bytes per cached slice (raw + painted)
+        layer.sliceBytes = 0; // approximate bytes per full-plane cached slice (raw + painted)
+        layer.fullWidth = 0;  // full image dims (first decoded slice / page 0)
+        layer.fullHeight = 0;
+        layer.singleStrip = false;    // detected storage format (performance hint)
+        layer.formatHintShown = false;
         layer.contrast = null;
         layer.dataRange = null;
         layer.contrastDomain = null;
@@ -741,11 +892,16 @@
                 layer.urls = urls;
                 layer.zCount = urls.length;
             } else {
-                var fileResp = await fetch(fileUrlFor(msg));
-                if (!fileResp.ok) throw new Error('image download failed (HTTP ' + fileResp.status + ')');
-                var buf = await fileResp.arrayBuffer();
-                layer.tiff = await GeoTIFF.fromArrayBuffer(buf);
+                // range-based open: only the IFD chain is fetched here, each
+                // page's pixels load on demand (206 partial responses). The
+                // source is reused across page reads but re-opened after any
+                // aborted read (ensureSlice drops layer.tiff on cancellation).
+                layer.fileUrl = fileUrlFor(msg);
+                layer.tiff = await GeoTIFF.fromUrl(layer.fileUrl);
                 layer.zCount = await layer.tiff.getImageCount();
+                var img0 = await layer.tiff.getImage(0);
+                layer.fullWidth = img0.getWidth();
+                layer.fullHeight = img0.getHeight();
             }
             layer.ready = true;
             syncSliders();
@@ -1665,7 +1821,7 @@
                         slice = await readSliceRaw(ref, z, nnAbort.signal);
                         initSliceRange(ref, slice);
                     } catch (err) {
-                        if (err && err.name === 'AbortError') {
+                        if ((err && err.name === 'AbortError') || (nnAbort && nnAbort.signal.aborted)) {
                             stopped = true;  // Stop clicked mid-fetch
                             break;
                         }
@@ -1804,7 +1960,8 @@
             el.zSlider.value = img.z;
             el.zValue.textContent = 'z: ' + img.z + ' / ' + (img.zCount - 1);
             abortStaleSliceFetches(img, img.z);
-            if (img.slices.has(img.z)) {
+            var key = sliceKey(img.z, sliceWindowFor(img));
+            if (img.slices.has(key)) {
                 if (zDebounceTimer) { clearTimeout(zDebounceTimer); zDebounceTimer = null; }
                 draw();
                 return;
@@ -1813,7 +1970,7 @@
             zDebounceTimer = setTimeout(function () {
                 zDebounceTimer = null;
                 if (!layerById(img.id)) return;  // layer was deleted mid-drag
-                ensureSlice(img, img.z);
+                ensureSlice(img, img.z, sliceWindowFor(img));
                 draw();
             }, 250);
         });
@@ -1854,18 +2011,49 @@
     function fitView() {
         var img = referenceImageLayer();
         if (!img || !img.ready) return;
-        var raw = img.slices.get(img.z);
-        if (!raw) {
+        // full image dims (not the dims of whatever slice is cached — a
+        // windowed entry covers only part of the plane)
+        var w = img.fullWidth;
+        var h = img.fullHeight;
+        if (!w || !h) {
             ensureSlice(img, img.z);
             return;
         }
-        var scale = Math.min(canvasW / raw.width, canvasH / raw.height);
+        var scale = Math.min(canvasW / w, canvasH / h);
         if (!isFinite(scale) || scale <= 0) scale = 1;
         view.scale = scale;
-        view.tx = (canvasW - raw.width * scale) / 2;
-        view.ty = (canvasH - raw.height * scale) / 2;
+        view.tx = (canvasW - w * scale) / 2;
+        view.ty = (canvasH - h * scale) / 2;
         view.fitted = true;
         draw();
+    }
+
+    // The image window the current view shows, quantized to the tile grid so
+    // pans/zooms reuse one cache entry: [x0, y0, x1, y1] in image pixels, or
+    // null when a full-plane read is wanted. A full-plane read is used when
+    // the whole plane is on-screen (at or below its fit-scale — every pixel
+    // is visible), when the dimensions are unknown, or when nothing is
+    // visible. Single-strip layers always read full planes: one strip is the
+    // atomic unit, so a "window" cannot fetch less than the whole image.
+    function sliceWindowFor(layer) {
+        var w = layer.fullWidth || 0;
+        var h = layer.fullHeight || 0;
+        if (!w || !h) return null;
+        if (layer.singleStrip) return null;
+        // the whole plane is on-screen when the view is at or below its
+        // fit-scale (every pixel visible -> fetch all of it)
+        if (view.scale <= Math.min(canvasW / w, canvasH / h)) return null;
+        var x0 = clamp(-view.tx / view.scale, 0, w);
+        var y0 = clamp(-view.ty / view.scale, 0, h);
+        var x1 = clamp((canvasW - view.tx) / view.scale, 0, w);
+        var y1 = clamp((canvasH - view.ty) / view.scale, 0, h);
+        if (x1 <= x0 || y1 <= y0) return null;
+        return [
+            Math.max(0, Math.floor(x0 / TILE_GRID) * TILE_GRID),
+            Math.max(0, Math.floor(y0 / TILE_GRID) * TILE_GRID),
+            Math.min(w, Math.ceil(x1 / TILE_GRID) * TILE_GRID),
+            Math.min(h, Math.ceil(y1 / TILE_GRID) * TILE_GRID)
+        ];
     }
 
     function drawImageLayer(layer) {
@@ -1874,20 +2062,26 @@
         // exist and mark the slice as failed before the real load lands.
         if (!layer.ready) return;
         var z = layer.z;
-        var entry = layer.paint.get(z);
+        var win = sliceWindowFor(layer);   // null = full-plane read
+        var key = sliceKey(z, win);
+        var entry = layer.paint.get(key);
         if (!entry || entry.cmin !== layer.contrast.min || entry.cmax !== layer.contrast.max) {
-            if (layer.slices.has(z)) {
-                paintSlice(layer, z);
-                entry = layer.paint.get(z);
+            if (layer.slices.has(key)) {
+                paintSlice(layer, key);
+                entry = layer.paint.get(key);
             } else {
-                ensureSlice(layer, z);
+                if (win) abortStaleWindowFetches(layer, z, key);
+                ensureSlice(layer, z, win);
                 return;
             }
         }
         if (!entry) return;
         ctx.setTransform(dpr * view.scale, 0, 0, dpr * view.scale, dpr * view.tx, dpr * view.ty);
         ctx.imageSmoothingEnabled = view.scale < 1;
-        ctx.drawImage(entry.canvas, 0, 0);
+        // windowed slices cover only [ox, ox + width) x [oy, oy + height) of
+        // the image, so they are placed at their image offset (world coords
+        // are image pixels)
+        ctx.drawImage(entry.canvas, entry.ox, entry.oy);
     }
 
     function drawPointsLayer(layer, viewZ) {
@@ -1960,7 +2154,7 @@
         }
 
         var ref = referenceImageLayer();
-        if (ref && !ref.paint.has(ref.z)) {
+        if (ref && !ref.paint.has(sliceKey(ref.z, sliceWindowFor(ref)))) {
             if (ref.ready && hintKind === 'default') showHint('Loading slice ' + ref.z + '…', 'loading');
         } else if (layers.length === 0) {
             showDefaultHint();
