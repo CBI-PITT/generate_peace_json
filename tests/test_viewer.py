@@ -100,20 +100,48 @@ def test_viewer_js_contracts():
         "'viewer-points-path'",
         "addEventListener('message'",
         "openFileBrowser",
-        # tiff decoding via the vendored geotiff.js
-        "GeoTIFF.fromArrayBuffer",
+        # tiff decoding via the vendored geotiff.js: range-based fromUrl (the
+        # browser blueprint serves bytes with HTTP range support, so tiled
+        # tiffs transfer only the tiles the view needs — no whole-file
+        # download). Folder mode opens a FRESH geotiff source per read —
+        # geotiff 2.0.4's block bookkeeping is not abort-safe and a shared
+        # source poisoned by an aborted read fails every later read of that
+        # plane with "Block X is not in the block requests"
+        "GeoTIFF.fromUrl",
         "readRasters",
         "getImageCount",
+        # viewport-windowed reads: zoomed-in views (above the plane's
+        # fit-scale) read only the visible window; single-strip files always
+        # read full planes (one strip is the atomic unit); the window is
+        # quantized to a tile grid so pans/zooms reuse the same cache entry
+        "readRasters({ window: win })",
+        "readRasters()",
+        "sliceWindowFor",
+        "TILE_GRID",
+        "sliceKey",
         # readRasters() shape normalization (geotiff 2.x returns an array of
         # sample planes; a failure must not re-trigger a fetch loop)
         "Array.isArray(rasters)",
         "layer.failed.add",
+        # cancellation handling: no abort signal reaches geotiff (aborting
+        # mid-read corrupts its block bookkeeping); the slice's own abort
+        # flag is checked after the source opens and after the read, and
+        # abort-induced errors never mark the slice failed
+        "abortedError",
+        "signal.aborted",
+        "is not in the block requests",
+        "layer.tiff = null",
         # z slider: debounced load + aborted stale slice fetches + byte-budgeted
         # slice cache (a 40MB-per-slice stack must not queue one download per
         # position the drag passes)
         "AbortController",
         "abortStaleSliceFetches",
+        "abortStaleWindowFetches",
         "SLICE_CACHE_BYTES",
+        # single-strip/uncompressed performance hint: a single strip is the
+        # atomic unit of every read, so zoomed views download the whole image
+        "singleStrip",
+        "Compressed and tiled tiffs",
         # dual-handle contrast slider: one track, min + max handles, domain
         # 0..dtype-max for unsigned ints (data range for signed/float)
         "contrastDomain",
