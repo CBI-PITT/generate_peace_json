@@ -30,6 +30,7 @@ from utils.job_history import new_workflow_submission_payload
 from utils.job_history import update_record
 from utils.job_history import write_submission_json
 from utils.slurm_status import query_job_states, summarize_job_ids
+from viewer_labels import viewer_labels
 
 
 app = Flask(__name__)
@@ -51,6 +52,7 @@ app = routes.init_blueprint(app, prefix="/browser")
 app = data_dashboard_routes.init_blueprint(app, prefix="/dashboard")
 
 app, login_manager = setup_auth(app)
+app.register_blueprint(viewer_labels)
 
 
 # Discover and load plugins

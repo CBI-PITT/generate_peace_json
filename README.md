@@ -59,6 +59,10 @@ watches the task folder and executes everything on a SLURM cluster.
   recorded history).
 - **Live queue page** — current SLURM queue with state badges; cancel is
   ownership-checked.
+- **Viewer** — load TIFF images, open or create points/labels layers, draw
+  sparse labels, and train/predict labels in the browser on the current plane.
+  Label layers can open TIFF masks or OME-Zarr groups and save OME-Zarr to a
+  selected server folder.
 - **Authentication** — institutional LDAP/NTLM login, rate-limited; a special
   admin role can manage any user's records.
 
@@ -69,6 +73,7 @@ flask_app/
 ├── app.py            entry point: routes, plugin discovery, blueprint mounts
 ├── config.py         env-driven configuration (JSON folder, port, history)
 ├── auth.py           Flask-Login + LDAP/NTLM authentication
+├── viewer_labels.py  authenticated sparse OME-Zarr import/export endpoints
 ├── forms.py          WTForms classes, one per operation
 ├── operations/       UI operation plugins (BaseOperation / BaseReader)
 ├── workflows/        workflow payload generation (steps, input bindings)
@@ -95,6 +100,8 @@ write `SLURM_settings*` payloads; the workflow builder writes
 | `/workflow/new` GET/POST | Workflow builder → JSON |
 | `/workflow/templates*` | Per-user workflow template CRUD |
 | `/queue` | Live SLURM queue |
+| `/viewer` | Image, points, and labels viewer |
+| `/viewer/labels/*` | Authenticated label-tile import and OME-Zarr export |
 | `/cancel`, `/history/.../{cancel,hold,release,rerun}` | Job control (ownership-checked) |
 | `/get_output_dir` | Output autofill from `.dataset_info.json` |
 | `/browser/...` | Mounted file browser blueprint |
@@ -119,6 +126,27 @@ The field names inside `extras` must match the `kwargs.get(...)` names the
 backend operation reads — treat the contract as a compatibility boundary (see
 `../peace_pipe_line_slurm_test/README.md`).
 
+### Viewer labels
+
+Load an image before creating or opening a Labels layer; imported masks must
+match its pixel dimensions. A one-page TIFF (or 2D Zarr mask) attaches to the
+current z-plane; a TIFF stack or 3D Zarr mask must match the image's z count.
+TIFF zeros are **unannotated**, not training background. Select **Draw** and
+paint with label number `0` to provide explicit background examples; **Eraser**
+removes annotations. Select **Segment → Train** to use manually painted pixels
+from every annotated plane (both background and foreground), then **Predict**
+to fill only the current plane. Predictions never replace hand-painted pixels;
+there is no labels-layer apply-to-all operation.
+
+For **Save OME-Zarr to folder**, select a writable folder in the embedded file
+browser. The viewer creates a new `<name>.ome.zarr` directory there and will
+not overwrite an existing one. It contains a chunked `labels/segmentation/0`
+array (zero-filled chunks omitted), a `labels/segmentation/manual/0` array that
+distinguishes painted label 0 from unannotated zeros, and a metadata-only
+zero-filled image array required for the standalone OME-Zarr layout. No TIFF
+image pixels are copied. Opening another OME-Zarr labels group without the
+companion manual array treats its nonzero values as manual annotations.
+
 ## Install and run
 
 ```bash
@@ -132,7 +160,8 @@ python3 app.py
 ```
 
 The install includes the package itself and `../data_dashboard` as editable
-dependencies, plus `duckdb` for the dashboard's default backend.
+dependencies, plus `duckdb` for the dashboard and `zarr`/`numcodecs` for
+viewer labels import/export.
 
 ### Configuration (env vars and `flask_app/config.py`)
 
