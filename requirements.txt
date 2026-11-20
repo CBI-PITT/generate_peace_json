@@ -36,5 +36,7 @@ wrapt==1.17.2
 WTForms==3.2.1
 zipp==3.21.0
 duckdb>=0.9
+zarr>=2.18,<3
+numcodecs>=0.12,<0.16
 -e .
 -e ../data_dashboard

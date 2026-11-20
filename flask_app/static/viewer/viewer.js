@@ -1,4 +1,4 @@
-// PEACE Viewer: kaibu-style image/points viewer rendered on a single canvas.
+// PEACE Viewer: image, points and labels layers rendered on a single canvas.
 //
 // Layers (bottom -> top in add order):
 // - image: a standalone .tif/.tiff file or a folder of tiffs (z-stack). Slices
@@ -12,11 +12,14 @@
 // - points: a CSV with napari-like coordinates — header columns 'axis-0' /
 //   'axis-1' / 'axis-2' or 'z' / 'y' / 'x' (3 columns overlay the z-stack,
 //   2 columns are a 2D image), falling back to positional z,y,x / y,x order.
+// - labels: 256x256 sparse tiles matched to an image stack. Open OME-Zarr
+//   groups or TIFF masks; export an OME-Zarr group on the server. An annotation
+//   bit distinguishes painted background (0) from unannotated zeros.
 //
 // Paths arrive via the shared file browser modal (browser_modal.html +
 // browser_picker.js): the postMessage payload is
 // {fieldId, selectedPath, fileName, nextBrowserPath} where fieldId is
-// 'viewer-image-path' or 'viewer-points-path'.
+// 'viewer-image-path', 'viewer-points-path' or 'viewer-labels-path'.
 
 (function () {
     'use strict';
@@ -50,6 +53,8 @@
     var VIEW_BG = '#1a1f29';
     var MIN_SCALE = 0.001;
     var MAX_SCALE = 200;
+    var LABEL_TILE = 256;
+    var BACKGROUND_COLOR = '#b8c7d9';
 
     var layers = [];
     var activeLayerId = null;
@@ -62,6 +67,12 @@
     var canvasMode = 'none';   // 'none' | 'add' | 'select' | 'classify'
     var rectDrag = null;       // rectangle select in progress: screen coords
     var additiveSelect = false;
+    var labelsPanelMode = null; // 'draw' | 'segment'
+    var labelsBrush = 'brush';   // 'brush' | 'eraser'
+    var labelsStroke = null;
+    var pendingLayerType = null;
+    var pendingExportLayerId = null;
+    var labelsJob = null;
 
     var view = { scale: 1, tx: 0, ty: 0, fitted: false };
 
@@ -183,6 +194,7 @@
     function sliderImageLayer() {
         var active = layerById(activeLayerId);
         if (active && active.type === 'image') return active;
+        if (active && active.type === 'labels') return labelsImage(active);
         return referenceImageLayer();
     }
 
@@ -831,6 +843,80 @@
         };
     }
 
+    function activeLabelsLayer() {
+        var layer = layerById(activeLayerId);
+        return layer && layer.type === 'labels' ? layer : null;
+    }
+
+    function labelsImage(layer) {
+        var image = layerById(layer.imageId);
+        return image && image.ready && image.visible ? image : null;
+    }
+
+    function labelsKey(z, ty, tx) { return z + ':' + ty + ':' + tx; }
+
+    function labelsTile(layer, z, ty, tx, create) {
+        var key = labelsKey(z, ty, tx);
+        var tile = layer.tiles.get(key);
+        if (!tile && create) {
+            tile = { values: new Uint16Array(LABEL_TILE * LABEL_TILE),
+                     manual: new Uint8Array(LABEL_TILE * LABEL_TILE),
+                     pred: new Uint8Array(LABEL_TILE * LABEL_TILE), version: 0 };
+            layer.tiles.set(key, tile);
+        }
+        return tile;
+    }
+
+    function newLabelsLayer(name) {
+        var image = referenceImageLayer();
+        if (!image || !image.ready || !image.fullWidth || !image.fullHeight) {
+            errorHint('Load an image slice before creating or opening labels.');
+            return null;
+        }
+        var layer = makeLayer('labels', name);
+        layer.imageId = image.id;
+        layer.width = image.fullWidth;
+        layer.height = image.fullHeight;
+        layer.zCount = image.zCount;
+        layer.tiles = new Map();
+        layer.loadedTiles = new Set();
+        layer.pendingTiles = new Set();
+        layer.loadedPlanes = new Set();
+        layer.failedPlanes = new Set();
+        layer.loadingPlanes = new Map();
+        layer.manifest = new Set();
+        layer.colors = { 1: CLASS_COLORS[0] };
+        layer.number = 1;
+        layer.size = 12;
+        var stem = name.replace(/\.ome\.zarr$/i, '').replace(/\.tiff?$/i, '')
+            .replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^[^A-Za-z0-9]+/, '') || 'labels';
+        layer.exportName = stem + '.ome.zarr';
+        layers.push(layer);
+        activeLayerId = layer.id;
+        canvasMode = 'none';
+        labelsPanelMode = null;
+        renderLayerList();
+        syncSliders();
+        renderToolsPanel();
+        draw();
+        return layer;
+    }
+
+    function addEmptyPointsLayer() {
+        var image = referenceImageLayer();
+        var layer = makeLayer('points', 'Untitled points');
+        layer.coords = [];
+        layer.hasZ = !!(image && image.zCount > 1);
+        layer.classified = false;
+        layer.classCount = 2;
+        layers.push(layer);
+        activeLayerId = layer.id;
+        canvasMode = 'none';
+        renderLayerList();
+        renderToolsPanel();
+        draw();
+    }
+
     // The embed picker can deliver the same selection twice (its Select
     // handler may fire twice); ignore a duplicate within a short window.
     function recentDuplicate(type, name) {
@@ -930,6 +1016,7 @@
                 if (coords.length === 0) throw new Error('no coordinate rows found');
                 var layer = makeLayer('points', name);
                 layer.coords = coords;
+                layer.hasZ = coords.some(function (p) { return p.z !== null; });
                 layer.classified = false;
                 layer.classCount = 2;
                 layers.push(layer);
@@ -947,8 +1034,15 @@
     function removeLayer(id, silent) {
         var idx = layers.findIndex(function (l) { return l.id === id; });
         if (idx === -1) return;
+        var removed = layers[idx];
         layers.splice(idx, 1);
-        if (activeLayerId === id) {
+        if (labelsJob && labelsJob.layerId === id) labelsJob.cancel();
+        if (removed.type === 'image') {
+            var jobLayer = labelsJob && layerById(labelsJob.layerId);
+            if (jobLayer && jobLayer.imageId === id) labelsJob.cancel();
+            layers = layers.filter(function (layer) { return layer.imageId !== id; });
+        }
+        if (!layerById(activeLayerId)) {
             activeLayerId = layers.length ? layers[layers.length - 1].id : null;
         }
         renderLayerList();
@@ -967,6 +1061,8 @@
     function setActive(id) {
         if (activeLayerId === id) return;
         activeLayerId = id;
+        canvasMode = 'none';
+        labelsPanelMode = null;
         renderLayerList();
         syncSliders();
         renderToolsPanel();
@@ -1001,8 +1097,9 @@
         item.dataset.layerId = String(layer.id);
 
         var typeIcon = document.createElement('i');
-        typeIcon.className = 'bi ' + (layer.type === 'image' ? 'bi-image' : 'bi-record-circle') + ' viewer-layer-type';
-        typeIcon.title = layer.type === 'image' ? 'Image layer' : 'Points layer';
+        typeIcon.className = 'bi ' + (layer.type === 'image' ? 'bi-image' :
+                                      layer.type === 'labels' ? 'bi-grid-3x3' : 'bi-record-circle') + ' viewer-layer-type';
+        typeIcon.title = layer.type === 'image' ? 'Image layer' : layer.type === 'labels' ? 'Labels layer' : 'Points layer';
 
         var eye = document.createElement('button');
         eye.type = 'button';
@@ -1045,6 +1142,16 @@
             exLi.appendChild(ex);
             menu.appendChild(exLi);
         }
+        if (layer.type === 'labels') {
+            var saveLi = document.createElement('li');
+            var save = document.createElement('button');
+            save.type = 'button';
+            save.className = 'dropdown-item';
+            save.dataset.action = 'save-labels';
+            save.textContent = 'Save OME-Zarr to folder';
+            saveLi.appendChild(save);
+            menu.appendChild(saveLi);
+        }
         var li = document.createElement('li');
         var del = document.createElement('button');
         del.type = 'button';
@@ -1077,9 +1184,13 @@
                 if (actionEl.dataset.action === 'toggle') {
                     layer.visible = !layer.visible;
                     renderLayerList();
+                    syncSliders();
+                    renderToolsPanel();
                     draw();
                 } else if (actionEl.dataset.action === 'export') {
                     exportPointsCsv(layer);
+                } else if (actionEl.dataset.action === 'save-labels') {
+                    startLabelsExport(layer);
                 } else if (actionEl.dataset.action === 'delete') {
                     removeLayer(layer.id);
                 }
@@ -1099,9 +1210,618 @@
                     errorHint('File browser picker not available.');
                     return;
                 }
-                openFileBrowser(type === 'image' ? 'viewer-image-path' : 'viewer-points-path');
+                if (type === 'image') {
+                    openFileBrowser('viewer-image-path');
+                    return;
+                }
+                if (type === 'labels' && !referenceImageLayer()) {
+                    errorHint('Load an image before adding a labels layer.');
+                    return;
+                }
+                pendingLayerType = type;
+                el.newLayerTitle.textContent = type === 'labels' ? 'Add labels layer' : 'Add points layer';
+                bootstrap.Modal.getOrCreateInstance(el.newLayerModal).show();
             });
         });
+        el.openLayer.addEventListener('click', function () {
+            bootstrap.Modal.getOrCreateInstance(el.newLayerModal).hide();
+            openFileBrowser(pendingLayerType === 'labels' ? 'viewer-labels-path' : 'viewer-points-path');
+        });
+        el.emptyLayer.addEventListener('click', function () {
+            bootstrap.Modal.getOrCreateInstance(el.newLayerModal).hide();
+            if (pendingLayerType === 'labels') newLabelsLayer('Untitled labels');
+            else if (pendingLayerType === 'points') addEmptyPointsLayer();
+        });
+    }
+
+    // ------------------------------------------------------------------
+    // Sparse labels: lazy Zarr/TIFF import, painting and OME-Zarr export
+    // ------------------------------------------------------------------
+
+    async function labelsJson(url, data) {
+        var response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                          body: JSON.stringify(data) });
+        if (!response.ok) {
+            var error = await response.text();
+            throw new Error('HTTP ' + response.status + ': ' + error.slice(0, 160));
+        }
+        return response.json();
+    }
+
+    async function addLabelsFromSelection(msg) {
+        var path = msg.selectedPath;
+        var name = msg.fileName || basename(path);
+        if (recentDuplicate('labels', name)) return;
+        var layer = newLabelsLayer(name);
+        if (!layer) return;
+        layer.sourceLoading = true;
+        renderToolsPanel();
+        try {
+            if (/\.zarr$/i.test(path)) {
+                var info = await labelsJson('/viewer/labels/info', { path: path });
+                var shape = info.shape;
+                if (shape[1] !== layer.height || shape[2] !== layer.width ||
+                    (shape[0] !== layer.zCount && shape[0] !== 1)) {
+                    throw new Error('Labels dimensions do not match the image');
+                }
+                layer.source = { type: 'zarr', path: path, single: shape[0] === 1 };
+                layer.sourceZ = shape[0] === 1 ? labelsImage(layer).z : null;
+                (info.tiles || []).forEach(function (key) {
+                    var parts = key.split(':');
+                    var z = layer.sourceZ === null ? Number(parts[0]) : layer.sourceZ;
+                    layer.manifest.add(labelsKey(z, parts[1], parts[2]));
+                });
+                (info.colors || []).forEach(function (entry) {
+                    var rgba = entry.rgba;
+                    if (entry['label-value'] > 0 && rgba && rgba.length >= 3) {
+                        layer.colors[entry['label-value']] = '#' + rgba.slice(0, 3).map(function (v) {
+                            return Math.round(v).toString(16).padStart(2, '0');
+                        }).join('');
+                    }
+                });
+            } else {
+                if (typeof GeoTIFF === 'undefined') throw new Error('geotiff.js is needed for TIFF labels');
+                var urls;
+                if (isTiffPath(path)) {
+                    urls = [fileUrlFor(msg)];
+                } else {
+                    var listing = await fetch(folderListingUrlFor(msg));
+                    if (!listing.ok) throw new Error('Could not list TIFF labels folder');
+                    var files = await listing.json();
+                    urls = (files.files || []).filter(function (url) { return isTiffPath(url); });
+                    if (!urls.length) throw new Error('No TIFF masks found');
+                }
+                var tiff = await GeoTIFF.fromUrl(urls[0]);
+                var pages = urls.length === 1 ? await tiff.getImageCount() : urls.length;
+                if (pages !== 1 && pages !== layer.zCount) throw new Error('TIFF z count does not match the image');
+                var image0 = await tiff.getImage(0);
+                if (image0.getWidth() !== layer.width || image0.getHeight() !== layer.height ||
+                    image0.getSamplesPerPixel() !== 1) throw new Error('TIFF mask dimensions/channels do not match the image');
+                layer.source = { type: 'tiff', urls: urls, tiff: tiff, pages: pages };
+                layer.sourceZ = pages === 1 ? labelsImage(layer).z : null;
+            }
+            if (!layerById(layer.id)) return;
+            layer.sourceLoading = false;
+            renderToolsPanel();
+            draw();
+            showHint('Opened labels ' + name + '.');
+        } catch (err) {
+            removeLayer(layer.id);
+            errorHint('Could not open labels: ' + err.message);
+        }
+    }
+
+    async function loadTiffLabelsPlane(layer, z) {
+        if (layer.loadedPlanes.has(z)) return;
+        if (layer.loadingPlanes.has(z)) return layer.loadingPlanes.get(z);
+        if (layer.sourceZ !== null && layer.sourceZ !== z) return;
+        var work = (async function () {
+            var source = layer.source;
+            var tiff = source.urls.length === 1 ? source.tiff : await GeoTIFF.fromUrl(source.urls[z]);
+            var image = await tiff.getImage(source.pages === 1 || source.urls.length > 1 ? 0 : z);
+            if (image.getWidth() !== layer.width || image.getHeight() !== layer.height ||
+                image.getSamplesPerPixel() !== 1) throw new Error('TIFF plane dimensions/channels do not match');
+            var data = await image.readRasters();
+            var plane = Array.isArray(data) ? data[0] : data;
+            for (var y = 0; y < layer.height; y++) {
+                for (var x = 0; x < layer.width; x++) {
+                    var value = plane[y * layer.width + x];
+                    if (!value) continue; // TIFF zero is unannotated, not manual background
+                    if (!Number.isInteger(value) || value < 0 || value > 65535) {
+                        throw new Error('TIFF labels must be unsigned integers up to 65535');
+                    }
+                    var tile = labelsTile(layer, z, Math.floor(y / LABEL_TILE), Math.floor(x / LABEL_TILE), true);
+                    var idx = (y % LABEL_TILE) * LABEL_TILE + (x % LABEL_TILE);
+                    tile.values[idx] = value;
+                    tile.manual[idx] = 1;
+                    if (!layer.colors[value]) layer.colors[value] = labelsColor(layer, value);
+                }
+            }
+            layer.loadedPlanes.add(z);
+            if (layerById(layer.id)) { renderToolsPanel(); draw(); }
+        })();
+        layer.loadingPlanes.set(z, work);
+        try { await work; }
+        catch (err) { layer.failedPlanes.add(z); throw err; }
+        finally { layer.loadingPlanes.delete(z); }
+    }
+
+    async function ensureLabelsTile(layer, z, ty, tx, create) {
+        var key = labelsKey(z, ty, tx);
+        if (layer.source && layer.source.type === 'tiff') await loadTiffLabelsPlane(layer, z);
+        if (layer.source && layer.source.type === 'zarr' && layer.manifest.has(key) &&
+            !layer.loadedTiles.has(key)) {
+            if (layer.pendingTiles.has(key)) return layer.pendingTiles.get(key);
+            var work = (async function () {
+                var response = await fetch('/viewer/labels/tile', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path: layer.source.path, z: layer.source.single ? 0 : z,
+                                           ty: ty, tx: tx })
+                });
+                if (!response.ok) throw new Error('Failed to load label tile (HTTP ' + response.status + ')');
+                var raw = await response.arrayBuffer();
+                if (raw.byteLength !== LABEL_TILE * LABEL_TILE * 3) throw new Error('Invalid label tile');
+                var tile = labelsTile(layer, z, ty, tx, true);
+                tile.values.set(new Uint16Array(raw.slice(0, LABEL_TILE * LABEL_TILE * 2)));
+                tile.manual.set(new Uint8Array(raw.slice(LABEL_TILE * LABEL_TILE * 2)));
+                layer.loadedTiles.add(key);
+                if (layerById(layer.id)) { draw(); renderToolsPanel(); }
+                return tile;
+            })();
+            layer.pendingTiles.set(key, work);
+            try { return await work; } finally { layer.pendingTiles.delete(key); }
+        }
+        return labelsTile(layer, z, ty, tx, create);
+    }
+
+    function labelsColor(layer, n) {
+        return n === 0 ? (layer.colors[0] || BACKGROUND_COLOR) :
+            (layer.colors[n] || CLASS_COLORS[(n - 1) % MAX_CLASSES]);
+    }
+
+    function paintLabelsTile(layer, tile) {
+        if (tile.paint && tile.paintVersion === tile.version && tile.paletteVersion === layer.paletteVersion) {
+            return tile.paint;
+        }
+        // Manual annotations render at full overlay strength; model
+        // predictions (including predicted background) at a lighter one so
+        // the two stay distinguishable. Predicted state is per-session only.
+        var pixels = new Uint8ClampedArray(LABEL_TILE * LABEL_TILE * 4);
+        var colorCache = {};
+        for (var i = 0; i < tile.values.length; i++) {
+            var n = tile.values[i];
+            var predicted = tile.pred[i] && !tile.manual[i];
+            if (!tile.manual[i] && !predicted && !n) continue;
+            if (!colorCache[n]) {
+                var c = labelsColor(layer, n);
+                colorCache[n] = [parseInt(c.slice(1, 3), 16), parseInt(c.slice(3, 5), 16),
+                                 parseInt(c.slice(5, 7), 16)];
+            }
+            var o = i * 4;
+            pixels[o] = colorCache[n][0];
+            pixels[o + 1] = colorCache[n][1];
+            pixels[o + 2] = colorCache[n][2];
+            pixels[o + 3] = predicted ? 80 : 145;
+        }
+        var canvas = document.createElement('canvas');
+        canvas.width = canvas.height = LABEL_TILE;
+        canvas.getContext('2d').putImageData(new ImageData(pixels, LABEL_TILE, LABEL_TILE), 0, 0);
+        tile.paint = canvas;
+        tile.paintVersion = tile.version;
+        tile.paletteVersion = layer.paletteVersion;
+        return canvas;
+    }
+
+    function drawLabelsLayer(layer) {
+        var image = labelsImage(layer);
+        if (!image) return;
+        var z = image.z;
+        if (layer.source && layer.source.type === 'tiff' && !layer.loadedPlanes.has(z)) {
+            if (layer.failedPlanes.has(z)) return;
+            if (!layer.loadingPlanes.has(z)) loadTiffLabelsPlane(layer, z).catch(function (err) {
+                errorHint(err.message);
+            });
+            return;
+        }
+        var x0 = Math.max(0, Math.floor(-view.tx / view.scale / LABEL_TILE));
+        var y0 = Math.max(0, Math.floor(-view.ty / view.scale / LABEL_TILE));
+        var x1 = Math.min(Math.ceil(layer.width / LABEL_TILE), Math.ceil((canvasW - view.tx) / view.scale / LABEL_TILE));
+        var y1 = Math.min(Math.ceil(layer.height / LABEL_TILE), Math.ceil((canvasH - view.ty) / view.scale / LABEL_TILE));
+        layer.manifest.forEach(function (key) {
+            var parts = key.split(':').map(Number);
+            if (parts[0] === z && parts[1] >= y0 && parts[1] < y1 && parts[2] >= x0 && parts[2] < x1 &&
+                !layer.loadedTiles.has(key) && !layer.pendingTiles.has(key)) {
+                ensureLabelsTile(layer, z, parts[1], parts[2], false).catch(function (err) {
+                    layer.loadedTiles.add(key); // no refetch loop on an invalid chunk
+                    errorHint(err.message);
+                });
+            }
+        });
+        ctx.setTransform(dpr * view.scale, 0, 0, dpr * view.scale, dpr * view.tx, dpr * view.ty);
+        ctx.imageSmoothingEnabled = false;
+        layer.tiles.forEach(function (tile, key) {
+            var parts = key.split(':').map(Number);
+            if (parts[0] !== z || parts[1] < y0 || parts[1] >= y1 || parts[2] < x0 || parts[2] >= x1) return;
+            ctx.drawImage(paintLabelsTile(layer, tile), parts[2] * LABEL_TILE, parts[1] * LABEL_TILE);
+        });
+    }
+
+    function renderLabelsTools(layer) {
+        var drawing = labelsPanelMode === 'draw';
+        el.labelsDrawPanel.classList.toggle('d-none', !drawing);
+        el.labelsSegmentPanel.classList.toggle('d-none', labelsPanelMode !== 'segment');
+        el.labelsDrawBtn.classList.toggle('active', drawing);
+        el.labelsSegmentBtn.classList.toggle('active', labelsPanelMode === 'segment');
+        el.labelsDrawBtn.setAttribute('aria-pressed', String(drawing));
+        el.labelsSegmentBtn.setAttribute('aria-pressed', String(labelsPanelMode === 'segment'));
+        el.labelsDrawBtn.disabled = !!layer.sourceLoading;
+        el.labelsSegmentBtn.disabled = !!layer.sourceLoading;
+        el.labelsExport.disabled = !!layer.sourceLoading;
+        el.labelsBrushBtn.classList.toggle('active', labelsBrush === 'brush');
+        el.labelsEraserBtn.classList.toggle('active', labelsBrush === 'eraser');
+        el.labelsBrushBtn.setAttribute('aria-pressed', String(labelsBrush === 'brush'));
+        el.labelsEraserBtn.setAttribute('aria-pressed', String(labelsBrush === 'eraser'));
+        el.canvasWrap.classList.toggle('viewer-mode-labels', drawing);
+        el.labelsNumber.value = String(layer.number);
+        el.labelsSize.value = String(layer.size);
+        el.labelsSizeValue.textContent = String(layer.size);
+        el.labelsColor.value = labelsColor(layer, layer.number);
+        el.labelsExportName.value = layer.exportName;
+        el.labelsTrain.disabled = !!layer.sourceLoading || !!labelsJob ||
+            (!layer.tiles.size && !layer.manifest.size && !layer.source);
+        el.labelsPredict.disabled = !!layer.sourceLoading || !!labelsJob || !layer.model;
+        el.labelsStop.classList.toggle('d-none', !labelsJob || labelsJob.layerId !== layer.id);
+        el.labelsStatus.textContent = layer.status || 'Paint foreground and background, then Train.';
+    }
+
+    function attachLabelsEvents() {
+        el.labelsDrawBtn.addEventListener('click', function () {
+            labelsPanelMode = labelsPanelMode === 'draw' ? null : 'draw';
+            renderToolsPanel();
+        });
+        el.labelsSegmentBtn.addEventListener('click', function () {
+            labelsPanelMode = labelsPanelMode === 'segment' ? null : 'segment';
+            renderToolsPanel();
+        });
+        el.labelsBrushBtn.addEventListener('click', function () { labelsBrush = 'brush'; renderToolsPanel(); });
+        el.labelsEraserBtn.addEventListener('click', function () { labelsBrush = 'eraser'; renderToolsPanel(); });
+        el.labelsNumber.addEventListener('change', function () {
+            var layer = activeLabelsLayer();
+            if (!layer) return;
+            layer.number = clamp(parseInt(el.labelsNumber.value, 10) || 0, 0, 65535);
+            if (!layer.colors[layer.number]) layer.colors[layer.number] = labelsColor(layer, layer.number);
+            renderToolsPanel();
+        });
+        el.labelsSize.addEventListener('input', function () {
+            var layer = activeLabelsLayer();
+            if (!layer) return;
+            layer.size = Number(el.labelsSize.value);
+            el.labelsSizeValue.textContent = String(layer.size);
+        });
+        el.labelsColor.addEventListener('input', function () {
+            var layer = activeLabelsLayer();
+            if (!layer) return;
+            layer.colors[layer.number] = el.labelsColor.value;
+            layer.paletteVersion = (layer.paletteVersion || 0) + 1;
+            draw();
+        });
+        el.labelsExportName.addEventListener('input', function () {
+            var layer = activeLabelsLayer();
+            if (layer) layer.exportName = el.labelsExportName.value.trim();
+        });
+        el.labelsExport.addEventListener('click', function () { startLabelsExport(activeLabelsLayer()); });
+        el.labelsTrain.addEventListener('click', trainLabels);
+        el.labelsPredict.addEventListener('click', predictLabels);
+        el.labelsStop.addEventListener('click', function () { if (labelsJob) labelsJob.cancel(); });
+    }
+
+    function startLabelsExport(layer) {
+        if (!layer || !labelsImage(layer)) return;
+        pendingExportLayerId = layer.id;
+        openFileBrowser('viewer-labels-export-path');
+    }
+
+    async function exportLabels(layer, parent) {
+        var token = null;
+        try {
+            // TIFF imports are decoded plane by plane; a sparse Zarr import
+            // only needs the populated chunks listed in its manifest.
+            if (layer.source && layer.source.type === 'tiff') {
+                for (var z = 0; z < layer.zCount; z++) {
+                    await loadTiffLabelsPlane(layer, z);
+                    showHint('Reading TIFF masks: ' + (z + 1) + '/' + layer.zCount);
+                }
+            }
+            var keys = new Set(layer.tiles.keys());
+            layer.manifest.forEach(function (key) { keys.add(key); });
+            var colors = Object.keys(layer.colors).map(function (n) {
+                var hex = labelsColor(layer, Number(n));
+                return { 'label-value': Number(n), rgba: [parseInt(hex.slice(1, 3), 16),
+                    parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16), 255] };
+            });
+            var result = await labelsJson('/viewer/labels/begin', {
+                parent: parent, name: layer.exportName, shape: [layer.zCount, layer.height, layer.width], colors: colors
+            });
+            token = result.token;
+            var done = 0;
+            for (var key of keys) {
+                var [zz, ty, tx] = key.split(':').map(Number);
+                var tile = await ensureLabelsTile(layer, zz, ty, tx, false);
+                done++;
+                if (!tile) continue;
+                var bytes = new Uint8Array(LABEL_TILE * LABEL_TILE * 3);
+                bytes.set(new Uint8Array(tile.values.buffer), 0);
+                bytes.set(tile.manual, LABEL_TILE * LABEL_TILE * 2);
+                var url = '/viewer/labels/write_tile?token=' + encodeURIComponent(token) +
+                    '&z=' + zz + '&ty=' + ty + '&tx=' + tx;
+                var response = await fetch(url, { method: 'POST', body: bytes });
+                if (!response.ok) throw new Error('Could not save tile ' + key + ' (HTTP ' + response.status + ')');
+                showHint('Saving OME-Zarr: ' + done + '/' + keys.size + ' tiles');
+            }
+            var saved = await labelsJson('/viewer/labels/finish', { token: token });
+            token = null;
+            showHint('Saved ' + saved.path);
+        } catch (err) {
+            if (token) labelsJson('/viewer/labels/cancel', { token: token }).catch(function () {});
+            errorHint('Could not save labels: ' + err.message);
+        }
+    }
+
+    async function stampLabels(layer, z, x, y, erasing) {
+        var radius = Math.max(0.75, layer.size / 2);
+        var x0 = Math.max(0, Math.floor(x - radius));
+        var x1 = Math.min(layer.width - 1, Math.ceil(x + radius));
+        var y0 = Math.max(0, Math.floor(y - radius));
+        var y1 = Math.min(layer.height - 1, Math.ceil(y + radius));
+        for (var ty = Math.floor(y0 / LABEL_TILE); ty <= Math.floor(y1 / LABEL_TILE); ty++) {
+            for (var tx = Math.floor(x0 / LABEL_TILE); tx <= Math.floor(x1 / LABEL_TILE); tx++) {
+                var tile = await ensureLabelsTile(layer, z, ty, tx, true);
+                for (var yy = Math.max(y0, ty * LABEL_TILE); yy <= Math.min(y1, (ty + 1) * LABEL_TILE - 1); yy++) {
+                    for (var xx = Math.max(x0, tx * LABEL_TILE); xx <= Math.min(x1, (tx + 1) * LABEL_TILE - 1); xx++) {
+                        if ((xx - x) ** 2 + (yy - y) ** 2 > radius * radius) continue;
+                        var i = (yy % LABEL_TILE) * LABEL_TILE + (xx % LABEL_TILE);
+                        tile.values[i] = erasing ? 0 : layer.number;
+                        tile.manual[i] = erasing ? 0 : 1;
+                        tile.pred[i] = 0;  // a stamped pixel is manual (or erased)
+                    }
+                }
+                tile.version++;
+            }
+        }
+        if (layerById(layer.id)) { draw(); renderToolsPanel(); }
+    }
+
+    function strokeLabels(layer, z, sx, sy) {
+        var x = (sx - view.tx) / view.scale;
+        var y = (sy - view.ty) / view.scale;
+        if (!labelsStroke || labelsStroke.layer !== layer || labelsStroke.z !== z) return;
+        var previous = labelsStroke.previous;
+        var distance = previous ? Math.hypot(x - previous.x, y - previous.y) : 0;
+        var steps = Math.max(1, Math.ceil(distance / Math.max(1, layer.size / 3)));
+        var erasing = labelsStroke.erasing;
+        labelsStroke.previous = { x: x, y: y };
+        labelsStroke.work = labelsStroke.work.then(async function () {
+            for (var s = previous ? 1 : 0; s <= steps; s++) {
+                var t = s / steps;
+                await stampLabels(layer, z, previous ? previous.x + (x - previous.x) * t : x,
+                                  previous ? previous.y + (y - previous.y) * t : y, erasing);
+            }
+        }).catch(function (err) { errorHint('Could not draw labels: ' + err.message); });
+    }
+
+    // ------------------------------------------------------------------
+    // Labels segmentation: worker-side neural net, current plane only
+    // ------------------------------------------------------------------
+
+    function labelsWorkerJob(layer) {
+        var worker = new Worker(window.labelsWorkerUrl);
+        var job = { layerId: layer.id, worker: worker, cancelled: false, reject: null };
+        job.cancel = function () {
+            job.cancelled = true;
+            worker.terminate();
+            if (job.reject) job.reject(new Error('Stopped'));
+        };
+        labelsJob = job;
+        renderToolsPanel();
+        return job;
+    }
+
+    function askLabelsWorker(job, message, transfer, onProgress) {
+        if (job.cancelled) return Promise.reject(new Error('Stopped'));
+        return new Promise(function (resolve, reject) {
+            job.reject = reject;
+            job.worker.onmessage = function (event) {
+                if (event.data.progress) {
+                    if (onProgress) onProgress(event.data);
+                    return;
+                }
+                job.reject = null;
+                if (event.data.error) reject(new Error(event.data.error));
+                else resolve(event.data.result);
+            };
+            job.worker.onerror = function (error) {
+                job.reject = null;
+                reject(new Error(error.message || 'Segmentation worker failed'));
+            };
+            job.worker.postMessage(message, transfer || []);
+        });
+    }
+
+    function labelsJobStatus(layer, text) {
+        layer.status = text;
+        if (activeLayerId === layer.id) renderToolsPanel();
+    }
+
+    function finishLabelsJob(job, layer) {
+        job.worker.terminate();
+        if (labelsJob === job) labelsJob = null;
+        if (layerById(layer.id)) renderToolsPanel();
+    }
+
+    // A full-plane read is reused for single-strip TIFFs: reading hundreds of
+    // small windows from a single-strip image would decompress the entire
+    // plane hundreds of times. Tiled TIFFs use small haloed range reads.
+    async function labelsImageTile(image, z, ty, tx, fullPlanes, signal) {
+        if (image.singleStrip) {
+            if (!fullPlanes.has(z)) {
+                fullPlanes.set(z, image.slices.get(z) || await readSliceRaw(image, z, signal));
+            }
+            return fullPlanes.get(z);
+        }
+        var x0 = Math.max(0, tx * LABEL_TILE - 2);
+        var y0 = Math.max(0, ty * LABEL_TILE - 2);
+        var x1 = Math.min(image.fullWidth, (tx + 1) * LABEL_TILE + 2);
+        var y1 = Math.min(image.fullHeight, (ty + 1) * LABEL_TILE + 2);
+        return readSliceRaw(image, z, signal, [x0, y0, x1, y1]);
+    }
+
+    function imageFirstChannel(slice) {
+        if (!slice.interleaved) return slice.data[0];
+        var first = new slice.data.constructor(slice.width * slice.height);
+        for (var i = 0; i < first.length; i++) first[i] = slice.data[i * slice.spp];
+        return first;
+    }
+
+    // Mirror of the worker's featuresAt: a normalized 11x11 intensity patch
+    // around the pixel (edge-clamped, halo-aware). No position features —
+    // they let the model memorize localized stroke locations instead of
+    // learning intensity patterns.
+    function labelFeatures(slice, pixels, x, y, range) {
+        var f = [];
+        var span = (range.max - range.min) || 1;
+        var half = 5;
+        for (var dy = -half; dy <= half; dy++) {
+            for (var dx = -half; dx <= half; dx++) {
+                var sx = clamp(x + dx - (slice.ox || 0), 0, slice.width - 1);
+                var sy = clamp(y + dy - (slice.oy || 0), 0, slice.height - 1);
+                f.push((pixels[sy * slice.width + sx] - range.min) / span);
+            }
+        }
+        return f;
+    }
+
+    function labelsRange(image) {
+        // A fixed range for all planes, independent of the contrast handles.
+        return image.contrastDomain || image.dataRange || { min: 0, max: 65535 };
+    }
+
+    async function trainLabels() {
+        var layer = activeLabelsLayer();
+        if (!layer || labelsJob) return;
+        var image = labelsImage(layer);
+        if (!image) { errorHint('Load the matching image first.'); return; }
+        var job = labelsWorkerJob(layer);
+        var fullPlanes = new Map();
+        try {
+            if (layer.source && layer.source.type === 'tiff') {
+                for (var z = 0; z < layer.zCount; z++) {
+                    if (job.cancelled) throw new Error('Stopped');
+                    await loadTiffLabelsPlane(layer, z);
+                    labelsJobStatus(layer, 'Reading TIFF labels: ' + (z + 1) + '/' + layer.zCount);
+                }
+            }
+            var keys = new Set(layer.tiles.keys());
+            layer.manifest.forEach(function (key) { keys.add(key); });
+            var features = [], targets = [], classes = new Set();
+            var range = labelsRange(image);
+            var done = 0;
+            for (var key of keys) {
+                if (job.cancelled) throw new Error('Stopped');
+                var [zz, ty, tx] = key.split(':').map(Number);
+                var tile = await ensureLabelsTile(layer, zz, ty, tx, false);
+                if (!tile || !tile.manual.some(function (m) { return m !== 0; })) continue;
+                var raw = await labelsImageTile(image, zz, ty, tx, fullPlanes);
+                var pixels = imageFirstChannel(raw);
+                var tileHeight = Math.min(LABEL_TILE, layer.height - ty * LABEL_TILE);
+                var tileWidth = Math.min(LABEL_TILE, layer.width - tx * LABEL_TILE);
+                for (var yy = 0; yy < tileHeight; yy++) {
+                    for (var xx = 0; xx < tileWidth; xx++) {
+                        var i = yy * LABEL_TILE + xx;
+                        if (!tile.manual[i]) continue;
+                        var n = tile.values[i];
+                        classes.add(n);
+                        targets.push(n);
+                var f = labelFeatures(raw, pixels, tx * LABEL_TILE + xx, ty * LABEL_TILE + yy, range);
+                        for (var fi = 0; fi < f.length; fi++) features.push(f[fi]);
+                    }
+                }
+                done++;
+                labelsJobStatus(layer, 'Loading training patches: ' + done + '/' + keys.size + ' tiles');
+            }
+            if (!classes.has(0) || classes.size < 2) {
+                throw new Error('Paint label 0 (background) and at least one foreground label before training.');
+            }
+            if (job.cancelled) throw new Error('Stopped');
+            var xs = Float32Array.from(features);
+            var ys = Uint16Array.from(targets);
+            var result = await askLabelsWorker(job, { type: 'train', features: xs.buffer,
+                targets: ys.buffer, classes: Array.from(classes).sort(function (a, b) { return a - b; }) },
+            [xs.buffer, ys.buffer], function (progress) {
+                labelsJobStatus(layer, 'Training: epoch ' + progress.progress + '/' + progress.total);
+            });
+            layer.model = result.model;
+            layer.modelRange = range;
+            labelsJobStatus(layer, 'Trained on all ' + result.count + ' manual pixels (' +
+                            result.model.classes.length + ' labels, loss ' + result.loss.toFixed(3) + ').');
+        } catch (err) {
+            labelsJobStatus(layer, err.message);
+            if (!job.cancelled) errorHint('Labels training: ' + err.message);
+        } finally {
+            finishLabelsJob(job, layer);
+        }
+    }
+
+    async function predictLabels() {
+        var layer = activeLabelsLayer();
+        if (!layer || !layer.model || labelsJob) return;
+        var image = labelsImage(layer);
+        if (!image) return;
+        var job = labelsWorkerJob(layer);
+        var z = image.z; // snapshot: moving the slider cannot shift the target plane
+        var fullPlanes = new Map();
+        var total = Math.ceil(layer.width / LABEL_TILE) * Math.ceil(layer.height / LABEL_TILE);
+        var done = 0;
+        var predictedForeground = 0;
+        try {
+            for (var ty = 0; ty < Math.ceil(layer.height / LABEL_TILE); ty++) {
+                for (var tx = 0; tx < Math.ceil(layer.width / LABEL_TILE); tx++) {
+                    if (job.cancelled) throw new Error('Stopped');
+                    var tile = await ensureLabelsTile(layer, z, ty, tx, true);
+                    var slice = await labelsImageTile(image, z, ty, tx, fullPlanes);
+                    var pixels = imageFirstChannel(slice);
+                    // Transfer copies: live tiles and cached image slices remain intact.
+                    var rawCopy = pixels.slice();
+                    var valueCopy = tile.values.slice();
+                    var manualCopy = tile.manual.slice();
+                    var result = await askLabelsWorker(job, { type: 'predict', model: layer.model,
+                        arrayType: rawCopy.constructor.name, raw: rawCopy.buffer,
+                        values: valueCopy.buffer, manual: manualCopy.buffer,
+                        width: slice.width, height: slice.height, ox: slice.ox || 0, oy: slice.oy || 0,
+                        fullWidth: layer.width, fullHeight: layer.height, tx: tx, ty: ty,
+                        tileWidth: Math.min(LABEL_TILE, layer.width - tx * LABEL_TILE),
+                        tileHeight: Math.min(LABEL_TILE, layer.height - ty * LABEL_TILE),
+                        range: layer.modelRange }, [rawCopy.buffer, valueCopy.buffer, manualCopy.buffer]);
+                    tile.values.set(new Uint16Array(result.values));
+                    for (var pi = 0; pi < tile.values.length; pi++) {
+                        tile.pred[pi] = tile.manual[pi] ? 0 : 1;
+                    }
+                    tile.version++;
+                    done++;
+                    predictedForeground += result.foreground || 0;
+                    labelsJobStatus(layer, 'Predicting z=' + z + ': ' + done + '/' + total + ' tiles');
+                    if (image.z === z && layer.visible) draw();
+                }
+            }
+            draw();  // final repaint even if the visible plane moved mid-pass
+            labelsJobStatus(layer, 'Predicted z=' + z + ' (' + total + ' tiles, ' + predictedForeground +
+                            ' foreground pixel' + (predictedForeground === 1 ? '' : 's') +
+                            '). Manual pixels preserved.');
+        } catch (err) {
+            labelsJobStatus(layer, job.cancelled ? 'Stopped after ' + done + '/' + total + ' tiles.' : err.message);
+            if (!job.cancelled) errorHint('Labels prediction: ' + err.message);
+        } finally {
+            finishLabelsJob(job, layer);
+        }
     }
 
     // ------------------------------------------------------------------
@@ -1139,13 +1859,17 @@
         if (!layer) {
             canvasMode = 'none';
             rectDrag = null;
-            el.toolsNote.classList.remove('d-none');
+            el.toolsNote.classList.toggle('d-none', !!activeLabelsLayer());
             el.pointsTools.classList.add('d-none');
-            el.canvasWrap.classList.remove('viewer-mode-add', 'viewer-mode-select', 'viewer-mode-classify');
+            el.labelsTools.classList.toggle('d-none', !activeLabelsLayer());
+            el.canvasWrap.classList.remove('viewer-mode-add', 'viewer-mode-select', 'viewer-mode-classify', 'viewer-mode-labels');
+            if (activeLabelsLayer()) renderLabelsTools(activeLabelsLayer());
             return;
         }
         el.toolsNote.classList.add('d-none');
         el.pointsTools.classList.remove('d-none');
+        el.labelsTools.classList.add('d-none');
+        el.canvasWrap.classList.remove('viewer-mode-labels');
         el.toolAdd.classList.toggle('active', canvasMode === 'add');
         el.toolSelect.classList.toggle('active', canvasMode === 'select');
         el.toolClassify.classList.toggle('active', canvasMode === 'classify');
@@ -1324,8 +2048,7 @@
         var wx = (cx - view.tx) / view.scale;
         var wy = (cy - view.ty) / view.scale;
         var ref = referenceImageLayer();
-        var noZ = layer.coords.every(function (p) { return p.z === null; });
-        var z = noZ ? null : (ref ? ref.z : null);
+        var z = layer.hasZ ? (ref ? ref.z : 0) : null;
         // new points start unclassified too (click to assign a class)
         layer.coords.push({ z: z, y: wy, x: wx, c: null, pred: false, sel: false });
         draw();
@@ -2136,6 +2859,8 @@
             if (!layer.visible) continue;
             if (layer.type === 'image') {
                 drawImageLayer(layer);
+            } else if (layer.type === 'labels') {
+                drawLabelsLayer(layer);
             } else {
                 var ref = referenceImageLayer();
                 drawPointsLayer(layer, ref ? ref.z : null);
@@ -2200,6 +2925,13 @@
         el.canvas.addEventListener('mousedown', function (e) {
             if (e.button !== 0) return;
             var rect = el.canvas.getBoundingClientRect();
+            var labels = activeLabelsLayer();
+            if (labels && !labels.sourceLoading && labelsPanelMode === 'draw' && labelsImage(labels)) {
+                labelsStroke = { layer: labels, z: labelsImage(labels).z,
+                                 erasing: labelsBrush === 'eraser', previous: null, work: Promise.resolve() };
+                strokeLabels(labels, labelsStroke.z, e.clientX - rect.left, e.clientY - rect.top);
+                return;
+            }
             mouseDown = { x: e.clientX - rect.left, y: e.clientY - rect.top, mode: canvasMode };
             if (canvasMode === 'select') {
                 // the drag becomes a rectangle select; panning is suspended
@@ -2212,6 +2944,12 @@
             el.canvas.classList.add('viewer-dragging');
         });
         window.addEventListener('mousemove', function (e) {
+            if (labelsStroke) {
+                var canvasRect = el.canvas.getBoundingClientRect();
+                strokeLabels(labelsStroke.layer, labelsStroke.z, e.clientX - canvasRect.left,
+                             e.clientY - canvasRect.top);
+                return;
+            }
             if (canvasMode === 'select' && rectDrag) {
                 var rect = el.canvas.getBoundingClientRect();
                 rectDrag.x1 = clamp(e.clientX - rect.left, 0, canvasW);
@@ -2227,6 +2965,10 @@
             draw();
         });
         window.addEventListener('mouseup', function (e) {
+            if (labelsStroke) {
+                labelsStroke = null;
+                return;
+            }
             if (canvasMode === 'select' && rectDrag) {
                 mouseDown = null;
                 finishRectSelect();
@@ -2263,6 +3005,12 @@
             addImageLayer(data);
         } else if (data.fieldId === 'viewer-points-path') {
             addPointsLayer(data);
+        } else if (data.fieldId === 'viewer-labels-path') {
+            addLabelsFromSelection(data);
+        } else if (data.fieldId === 'viewer-labels-export-path') {
+            var exportLayer = layerById(pendingExportLayerId);
+            pendingExportLayerId = null;
+            if (exportLayer) exportLabels(exportLayer, data.selectedPath);
         }
     });
 
@@ -2304,6 +3052,27 @@
         el.nnApplyIcon = $('nnApplyIcon');
         el.nnApplyText = $('nnApplyText');
         el.nnStatus = $('nnStatus');
+        el.newLayerModal = $('viewerNewLayerModal');
+        el.newLayerTitle = $('viewerNewLayerTitle');
+        el.openLayer = $('viewerOpenLayerBtn');
+        el.emptyLayer = $('viewerEmptyLayerBtn');
+        el.labelsTools = $('labelsTools');
+        el.labelsDrawBtn = $('labelsDrawBtn');
+        el.labelsSegmentBtn = $('labelsSegmentBtn');
+        el.labelsDrawPanel = $('labelsDrawPanel');
+        el.labelsSegmentPanel = $('labelsSegmentPanel');
+        el.labelsBrushBtn = $('labelsBrushBtn');
+        el.labelsEraserBtn = $('labelsEraserBtn');
+        el.labelsSize = $('labelsSize');
+        el.labelsSizeValue = $('labelsSizeValue');
+        el.labelsNumber = $('labelsNumber');
+        el.labelsColor = $('labelsColor');
+        el.labelsExportName = $('labelsExportName');
+        el.labelsExport = $('labelsExportBtn');
+        el.labelsTrain = $('labelsTrainBtn');
+        el.labelsPredict = $('labelsPredictBtn');
+        el.labelsStop = $('labelsStopBtn');
+        el.labelsStatus = $('labelsStatus');
         if (!el.canvas || !el.layerList) return;
         ctx = el.canvas.getContext('2d');
 
@@ -2322,6 +3091,7 @@
         attachPanelEvents();
         attachSliderEvents();
         attachToolsEvents();
+        attachLabelsEvents();
     }
 
     if (document.readyState === 'loading') {

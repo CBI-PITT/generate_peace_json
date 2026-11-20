@@ -30,6 +30,11 @@
                             <i class="bi bi-record-circle me-2"></i>Points layer
                         </button>
                     </li>
+                    <li>
+                        <button type="button" class="dropdown-item viewer-add-layer" data-layer-type="labels">
+                            <i class="bi bi-grid-3x3 me-2"></i>Labels layer
+                        </button>
+                    </li>
                 </ul>
             </div>
             <div id="layerList" class="viewer-layer-list"></div>
@@ -72,7 +77,7 @@
                             <div id="classColorList" class="viewer-class-list"></div>
                             <div class="btn-group w-100 viewer-nn-group" role="group" aria-label="Point classifier">
                                 <button type="button" class="btn btn-sm btn-outline-primary" id="nnTrainBtn"
-                                        title="Train on the manually classified points of the current z plane" disabled>
+                                        title="Train on manually classified points from all z planes" disabled>
                                     <i class="bi bi-cpu me-1"></i>Train
                                 </button>
                                 <button type="button" class="btn btn-sm btn-outline-primary" id="nnPredictBtn"
@@ -91,6 +96,41 @@
                             </button>
                             <div class="viewer-tools-hint text-muted" id="nnStatus">No model yet.</div>
                         </div>
+                    </div>
+                    <div id="labelsTools" class="d-none">
+                        <div class="btn-group w-100 viewer-tool-group" role="group" aria-label="Labels tools">
+                            <button type="button" class="btn btn-sm btn-outline-primary" id="labelsDrawBtn" aria-pressed="false">Draw</button>
+                            <button type="button" class="btn btn-sm btn-outline-primary" id="labelsSegmentBtn" aria-pressed="false">Segment</button>
+                        </div>
+                        <div id="labelsDrawPanel" class="viewer-tool-sub d-none">
+                            <div class="btn-group w-100" role="group" aria-label="Drawing tools">
+                                <button type="button" class="btn btn-sm btn-outline-primary" id="labelsBrushBtn" aria-pressed="true">Brush</button>
+                                <button type="button" class="btn btn-sm btn-outline-primary" id="labelsEraserBtn" aria-pressed="false">Eraser</button>
+                            </div>
+                            <label class="viewer-label-field" for="labelsSize">Brush size (pixels)
+                                <input type="range" id="labelsSize" min="1" max="100" value="12">
+                                <span id="labelsSizeValue">12</span>
+                            </label>
+                            <label class="viewer-label-field" for="labelsNumber">Label number (0 = background)
+                                <input type="number" id="labelsNumber" class="form-control form-control-sm" min="0" max="65535" step="1" value="1">
+                            </label>
+                            <label class="viewer-label-field" for="labelsColor">Label color
+                                <input type="color" id="labelsColor" value="#ffdd00">
+                            </label>
+                            <div class="viewer-tools-hint text-muted">Brush 0 paints training background; Eraser removes annotations.</div>
+                        </div>
+                        <div id="labelsSegmentPanel" class="viewer-tool-sub d-none">
+                            <div class="btn-group w-100" role="group" aria-label="Labels segmentation">
+                                <button type="button" class="btn btn-sm btn-outline-primary" id="labelsTrainBtn" disabled>Train</button>
+                                <button type="button" class="btn btn-sm btn-outline-primary" id="labelsPredictBtn" disabled>Predict</button>
+                                <button type="button" class="btn btn-sm btn-outline-primary d-none" id="labelsStopBtn">Stop</button>
+                            </div>
+                            <div id="labelsStatus" class="viewer-tools-hint text-muted">Paint foreground and background, then Train.</div>
+                        </div>
+                        <label class="viewer-label-field" for="labelsExportName">Zarr folder name
+                            <input type="text" id="labelsExportName" class="form-control form-control-sm" value="labels.ome.zarr">
+                        </label>
+                        <button type="button" id="labelsExportBtn" class="btn btn-sm btn-outline-primary w-100">Save OME-Zarr to folder</button>
                     </div>
                 </div>
             </div>
@@ -124,8 +164,20 @@
         </div>
     </div>
 </div>
+<div class="modal fade" id="viewerNewLayerModal" tabindex="-1" aria-labelledby="viewerNewLayerTitle" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+        <div class="modal-header"><h5 class="modal-title" id="viewerNewLayerTitle">Add layer</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button></div>
+        <div class="modal-body d-flex gap-2">
+            <button type="button" class="btn btn-outline-primary flex-fill" id="viewerOpenLayerBtn">Open file or folder</button>
+            <button type="button" class="btn btn-outline-primary flex-fill" id="viewerEmptyLayerBtn">Create empty</button>
+        </div>
+    </div></div>
+</div>
 <input type="hidden" id="viewer-image-path">
 <input type="hidden" id="viewer-points-path">
+<input type="hidden" id="viewer-labels-path">
+<input type="hidden" id="viewer-labels-export-path">
 {% endblock %}
 
 {% block scripts %}
@@ -133,5 +185,6 @@
 {% include "browser_modal.html" %}
 <script src="{{ url_for('static', filename='viewer/vendor/geotiff.js') }}"></script>
 <script src="{{ url_for('static', filename='js/browser_picker.js') }}"></script>
+<script>window.labelsWorkerUrl = {{ url_for('static', filename='viewer/labels_worker.js') | tojson }};</script>
 <script src="{{ url_for('static', filename='viewer/viewer.js') }}"></script>
 {% endblock %}

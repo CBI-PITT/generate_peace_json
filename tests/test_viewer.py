@@ -349,3 +349,16 @@ def test_viewer_css_contracts():
         ".viewer-layer-eye",
     ]:
         assert needle in css, f"viewer.css missing {needle}"
+
+
+def test_labels_layer_ui_and_worker_wiring(jinja_env):
+    html = jinja_env.get_template('viewer.html').render()
+    for element in ('data-layer-type="labels"', 'viewerNewLayerModal', 'viewerOpenLayerBtn',
+                    'viewerEmptyLayerBtn', 'labelsTools', 'labelsDrawBtn', 'labelsBrushBtn',
+                    'labelsEraserBtn', 'labelsNumber', 'labelsColor', 'labelsSize',
+                    'labelsSegmentBtn', 'labelsTrainBtn', 'labelsPredictBtn',
+                    'labelsExportBtn', 'viewer-labels-path', 'viewer-labels-export-path',
+                    'viewer/labels_worker.js'):
+        assert element in html
+    assert 'id="labelsApplyBtn"' not in html
+    assert html.count('<script') == html.count('</script>')

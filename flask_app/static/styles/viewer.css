@@ -112,7 +112,7 @@ body.peace-body {
     color: var(--bs-secondary-color);
 }
 
-/* ---------- Points tools panel ---------- */
+/* ---------- Annotation tools panel ---------- */
 
 .viewer-tools {
     border-top: 1px solid var(--bs-border-color);
@@ -203,12 +203,28 @@ body.peace-body {
     margin-top: .5rem;
 }
 
+.viewer-label-field {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: .35rem;
+    margin: .6rem 0 0;
+    font-size: .8rem;
+}
+
+.viewer-label-field .form-control { width: 100%; }
+.viewer-label-field input[type="range"] { flex: 1; min-width: 100px; }
+.viewer-label-field input[type="color"] { width: 42px; height: 30px; padding: 2px; }
+
 /* Crosshair cursor while a points tool mode is active */
 .viewer-canvas-wrap.viewer-mode-add .viewer-canvas,
 .viewer-canvas-wrap.viewer-mode-select .viewer-canvas,
 .viewer-canvas-wrap.viewer-mode-classify .viewer-canvas {
     cursor: crosshair;
 }
+
+.viewer-canvas-wrap.viewer-mode-labels .viewer-canvas { cursor: crosshair; }
 
 /* ---------- Right canvas stage ---------- */
 
