@@ -176,4 +176,6 @@ venv.bak/
 
 *.~lock.*
 
+# Agent change notes (kept local, not tracked)
+AGENT_NOTES.md
 

@@ -136,6 +136,7 @@ def setup_auth(app):
                                    )  # Return bool True/False if auth succeeds/fails and None if error
 
             if user == False:
+                app.logger.warning('Failed login: ip=%s user=%s', remote_ip, username)
                 flash('''Your credentials are not valid''')
                 return redirect(url_for('login'))
             if user is None:

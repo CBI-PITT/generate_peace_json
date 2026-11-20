@@ -1,11 +1,13 @@
 import json
 import copy
 import importlib
+import logging
 import os
 import re
 import secrets
 import subprocess
 from datetime import datetime
+from logging.handlers import RotatingFileHandler
 
 from flask import Flask, render_template, request, jsonify, redirect, url_for
 from flask import flash
@@ -19,6 +21,8 @@ from workflows import BaseWorkflow
 from flask_file_browser import routes
 from data_dashboard import routes as data_dashboard_routes
 from auth import setup_auth, user_info
+from config import ACCESS_LOG
+from config import DEBUG
 from config import ENABLE_JOB_HISTORY
 from config import PORT
 from utils.users import get_user
@@ -889,5 +893,20 @@ def cancel_job():
         return jsonify({"message": str(e)}), 500
 
 
+def setup_access_logging():
+    """Persist werkzeug HTTP access lines and app errors to a log file."""
+    try:
+        handler = RotatingFileHandler(ACCESS_LOG, maxBytes=10485760, backupCount=10)
+    except OSError as exc:
+        app.logger.warning('Access logging disabled (cannot open %s: %s)', ACCESS_LOG, exc)
+        return
+    handler.setFormatter(logging.Formatter('%(asctime)s %(message)s'))
+    werkzeug_logger = logging.getLogger('werkzeug')
+    werkzeug_logger.addHandler(handler)
+    werkzeug_logger.setLevel(logging.INFO)
+    app.logger.addHandler(handler)
+
+
 if __name__ == '__main__':
-    app.run(host="0.0.0.0", port=PORT, debug=True)
+    setup_access_logging()
+    app.run(host="0.0.0.0", port=PORT, debug=DEBUG)
