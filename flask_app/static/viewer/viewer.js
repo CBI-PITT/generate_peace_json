@@ -2834,6 +2834,27 @@
         ];
     }
 
+    // While the wanted slice is still loading, keep the best already-rendered
+    // slice of the same z on the stage (the view transform scales it), so
+    // zoom/pan transitions do not blank the image until the fetch lands. The
+    // full-plane entry is preferred (it covers the whole plane); otherwise the
+    // largest windowed entry is drawn at its image offset.
+    function drawStaleSlice(layer, z) {
+        var entry = layer.paint.get(z);
+        if (!entry) {
+            var bestArea = 0;
+            layer.paint.forEach(function (e, key) {
+                if (keyZ(key) !== z) return;
+                var area = e.canvas.width * e.canvas.height;
+                if (area > bestArea) { bestArea = area; entry = e; }
+            });
+        }
+        if (!entry) return;
+        ctx.setTransform(dpr * view.scale, 0, 0, dpr * view.scale, dpr * view.tx, dpr * view.ty);
+        ctx.imageSmoothingEnabled = view.scale < 1;
+        ctx.drawImage(entry.canvas, entry.ox, entry.oy);
+    }
+
     function drawImageLayer(layer) {
         // Skip layers whose data source has not resolved yet: drawing them
         // would call ensureSlice()/readSliceRaw() before layer.tiff/urls
@@ -2850,6 +2871,7 @@
             } else {
                 if (win) abortStaleWindowFetches(layer, z, key);
                 ensureSlice(layer, z, win);
+                drawStaleSlice(layer, z);
                 return;
             }
         }

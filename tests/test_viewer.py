@@ -152,6 +152,11 @@ def test_viewer_js_contracts():
         "'zPrevBtn'",
         "'zNextBtn'",
         "'zMax'",
+        # zoom discontinuity fix: while a slice is loading the best
+        # already-rendered same-z entry is drawn (stale-slice fallback) instead
+        # of blanking the stage until the sharper windowed read arrives
+        "drawStaleSlice",
+        "layer.paint.get(z)",
         # single-strip/uncompressed performance hint: a single strip is the
         # atomic unit of every read, so zoomed views download the whole image
         "singleStrip",
