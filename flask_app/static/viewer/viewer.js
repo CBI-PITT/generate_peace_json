@@ -989,6 +989,8 @@
                 layer.fullWidth = img0.getWidth();
                 layer.fullHeight = img0.getHeight();
             }
+            // A z-stack opens on its middle plane (single-slice stacks stay 0).
+            layer.z = Math.floor((layer.zCount - 1) / 2);
             layer.ready = true;
             syncSliders();
             ensureSlice(layer, layer.z);
@@ -2653,13 +2655,49 @@
         el.contrastMax.style.zIndex = which === 'max' ? '5' : '4';
     }
 
+    // Shared z-plane switch for the slider drag, the prev/next buttons and
+    // the typed z value. Each slice can be 40MB+, so the load is debounced
+    // and fires once the input pauses (already-cached slices show instantly).
+    var zDebounceTimer = null;
+
+    function cancelZDebounce() {
+        if (zDebounceTimer) { clearTimeout(zDebounceTimer); zDebounceTimer = null; }
+    }
+
+    function loadZ(img) {
+        abortStaleSliceFetches(img, img.z);
+        var key = sliceKey(img.z, sliceWindowFor(img));
+        if (img.slices.has(key)) {
+            cancelZDebounce();
+            draw();
+            return;
+        }
+        cancelZDebounce();
+        zDebounceTimer = setTimeout(function () {
+            zDebounceTimer = null;
+            if (!layerById(img.id)) return;  // layer was deleted mid-switch
+            ensureSlice(img, img.z, sliceWindowFor(img));
+            draw();
+        }, 250);
+    }
+
+    function applyZ(img, z) {
+        if (!img || img.zCount <= 1) return;
+        img.z = clamp(parseInt(z, 10) || 0, 0, img.zCount - 1);
+        el.zSlider.value = img.z;
+        el.zValue.value = img.z;
+        loadZ(img);
+    }
+
     function syncSliders() {
         var img = sliderImageLayer();
         if (img && img.zCount > 1) {
             el.zRow.classList.remove('d-none');
             el.zSlider.max = img.zCount - 1;
             el.zSlider.value = img.z;
-            el.zValue.textContent = 'z: ' + img.z + ' / ' + (img.zCount - 1);
+            el.zValue.max = img.zCount - 1;
+            el.zValue.value = img.z;
+            el.zMax.textContent = img.zCount - 1;
         } else {
             el.zRow.classList.add('d-none');
         }
@@ -2673,29 +2711,46 @@
 
     function attachSliderEvents() {
         // Dragging the z slider fires 'input' for every position it passes;
-        // each slice can be 40MB+, so the load is debounced and fires once
-        // the drag pauses (already-cached slices still show instantly).
-        var zDebounceTimer = null;
+        // applyZ debounces the slice load (see loadZ above).
         el.zSlider.addEventListener('input', function () {
             var img = sliderImageLayer();
+            applyZ(img, el.zSlider.value);
+        });
+
+        el.zPrevBtn.addEventListener('click', function () {
+            var img = sliderImageLayer();
+            if (!img) return;
+            applyZ(img, img.z - 1);
+        });
+
+        el.zNextBtn.addEventListener('click', function () {
+            var img = sliderImageLayer();
+            if (!img) return;
+            applyZ(img, img.z + 1);
+        });
+
+        // Typed z: live keystrokes switch planes debounced but never rewrite
+        // the field mid-typing; Enter/blur commits (clamps the value, reverts
+        // an unparseable one).
+        el.zValue.addEventListener('input', function () {
+            var img = sliderImageLayer();
             if (!img || img.zCount <= 1) return;
-            img.z = clamp(parseInt(el.zSlider.value, 10) || 0, 0, img.zCount - 1);
-            el.zSlider.value = img.z;
-            el.zValue.textContent = 'z: ' + img.z + ' / ' + (img.zCount - 1);
-            abortStaleSliceFetches(img, img.z);
-            var key = sliceKey(img.z, sliceWindowFor(img));
-            if (img.slices.has(key)) {
-                if (zDebounceTimer) { clearTimeout(zDebounceTimer); zDebounceTimer = null; }
-                draw();
+            var v = parseInt(el.zValue.value, 10);
+            if (isNaN(v) || v < 0 || v > img.zCount - 1 || v === img.z) return;
+            img.z = v;
+            el.zSlider.value = v;
+            loadZ(img);
+        });
+
+        el.zValue.addEventListener('change', function () {
+            var img = sliderImageLayer();
+            if (!img || img.zCount <= 1) return;
+            var v = parseInt(el.zValue.value, 10);
+            if (isNaN(v)) {
+                el.zValue.value = img.z;
                 return;
             }
-            if (zDebounceTimer) clearTimeout(zDebounceTimer);
-            zDebounceTimer = setTimeout(function () {
-                zDebounceTimer = null;
-                if (!layerById(img.id)) return;  // layer was deleted mid-drag
-                ensureSlice(img, img.z, sliceWindowFor(img));
-                draw();
-            }, 250);
+            applyZ(img, v);
         });
 
         el.contrastMin.addEventListener('input', function () {
@@ -3027,6 +3082,9 @@
         el.zRow = $('zSliderRow');
         el.zSlider = $('zSlider');
         el.zValue = $('zValue');
+        el.zMax = $('zMax');
+        el.zPrevBtn = $('zPrevBtn');
+        el.zNextBtn = $('zNextBtn');
         el.contrastRow = $('contrastRow');
         el.contrastMin = $('contrastMinSlider');
         el.contrastMax = $('contrastMaxSlider');

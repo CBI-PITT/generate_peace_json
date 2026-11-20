@@ -314,6 +314,52 @@ body.peace-body {
     font-variant-numeric: tabular-nums;
 }
 
+/* z-plane step buttons at the ends of the z slider. */
+.viewer-z-btn {
+    flex: 0 0 auto;
+    padding: 0 .3rem;
+    line-height: 1.2;
+    font-size: .7rem;
+    color: #adb5bd;
+    border-color: rgba(173, 181, 189, .35);
+    background: transparent;
+}
+
+.viewer-z-btn:hover,
+.viewer-z-btn:focus {
+    color: #e9ecef;
+    border-color: #adb5bd;
+    background: rgba(173, 181, 189, .15);
+}
+
+/* Typed z-layer value: the current plane number is editable. */
+.viewer-z-input {
+    width: 4.5ch;
+    padding: 0 .15rem;
+    font-size: .8rem;
+    color: #e9ecef;
+    background: transparent;
+    border: 1px solid rgba(173, 181, 189, .35);
+    border-radius: .25rem;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    appearance: textfield;
+    -moz-appearance: textfield;
+}
+
+.viewer-z-input::-webkit-outer-spin-button,
+.viewer-z-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.viewer-z-input:hover,
+.viewer-z-input:focus {
+    border-color: #adb5bd;
+    outline: none;
+    box-shadow: none;
+}
+
 /* Dual-handle contrast slider: two stacked range inputs over one custom
    track. The inputs pass pointer events through to their thumbs only, so
    either handle can be dragged on the same track. */

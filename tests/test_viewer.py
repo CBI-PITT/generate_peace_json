@@ -47,6 +47,11 @@ def test_viewer_template_wiring():
         'id="viewerCanvasWrap"',
         'id="viewerHint"',
         'id="zSlider"',
+        'id="zPrevBtn"',
+        'id="zNextBtn"',
+        'id="zValue"',
+        'id="zMax"',
+        'type="number"',
         'id="contrastDual"',
         'id="contrastFill"',
         'id="contrastMinSlider"',
@@ -138,6 +143,15 @@ def test_viewer_js_contracts():
         "abortStaleSliceFetches",
         "abortStaleWindowFetches",
         "SLICE_CACHE_BYTES",
+        # z slider: middle-plane open, prev/next step buttons and a typed z
+        # value share the debounced loadZ/applyZ switch (the slider keeps its
+        # debounced drag behavior)
+        "Math.floor((layer.zCount - 1) / 2)",
+        "applyZ",
+        "loadZ",
+        "'zPrevBtn'",
+        "'zNextBtn'",
+        "'zMax'",
         # single-strip/uncompressed performance hint: a single strip is the
         # atomic unit of every read, so zoomed views download the whole image
         "singleStrip",
@@ -345,6 +359,8 @@ def test_viewer_css_contracts():
         ".viewer-hint",
         ".viewer-sliders",
         ".viewer-slider-row",
+        ".viewer-z-btn",
+        ".viewer-z-input",
         ".viewer-layer-item",
         ".viewer-layer-eye",
     ]:

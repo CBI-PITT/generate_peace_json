@@ -146,8 +146,10 @@
             <div class="viewer-sliders">
                 <div class="viewer-slider-row d-none" id="zSliderRow">
                     <label class="viewer-slider-label" for="zSlider">z</label>
+                    <button type="button" class="btn btn-sm viewer-z-btn" id="zPrevBtn" title="Previous z plane" aria-label="Previous z plane"><i class="bi bi-chevron-left"></i></button>
                     <input type="range" class="form-range" id="zSlider" min="0" max="0" step="1" value="0">
-                    <span class="viewer-slider-value" id="zValue">z: 0 / 0</span>
+                    <button type="button" class="btn btn-sm viewer-z-btn" id="zNextBtn" title="Next z plane" aria-label="Next z plane"><i class="bi bi-chevron-right"></i></button>
+                    <span class="viewer-slider-value"><input type="number" class="viewer-z-input" id="zValue" min="0" max="0" step="1" value="0"> / <span id="zMax">0</span></span>
                 </div>
                 <div class="viewer-slider-row d-none" id="contrastRow">
                     <label class="viewer-slider-label">contrast</label>
